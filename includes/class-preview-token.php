@@ -32,10 +32,13 @@ class Evive_Preview_Token {
         update_post_meta($post_id, '_evive_preview_token',         $token);
         update_post_meta($post_id, '_evive_preview_token_expires', $expires);
 
+        // home_url() of the current site: the front end where the post lives. The first argument
+        // of get_site_url() is a blog ID, so get_site_url('/') pointed at the MAIN site on a
+        // Multisite and a subsite draft preview (e.g. /en/) opened on the wrong site (evive #369).
         $preview_url = add_query_arg([
             'evive_preview' => $token,
             'post_id'       => $post_id,
-        ], get_site_url('/'));
+        ], home_url('/'));
 
         return rest_ensure_response([
             'preview_url' => $preview_url,

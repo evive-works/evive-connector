@@ -8,7 +8,7 @@
  * License:     Proprietary
  * Requires at least: 6.0
  * Requires PHP: 8.0
- * Update URI:  https://app.evive.works/downloads/evive-connector-update.json
+ * Update URI:  https://github.com/evive-works/evive-connector
  */
 
 if (!defined('ABSPATH')) exit;
@@ -16,15 +16,19 @@ if (!defined('ABSPATH')) exit;
 define('EVIVE_VERSION', '1.3.25');
 define('EVIVE_PATH', plugin_dir_path(__FILE__));
 
-// ── Self-hosted auto-update via Plugin Update Checker ─────────────────────
+// ── Auto-update from GitHub releases via Plugin Update Checker ────────────
+// Since 1.3.26: the release asset evive-connector.zip of github.com/evive-works/evive-connector.
+// Up to 1.3.25 updates came from a JSON manifest on app.evive.works.
 require_once __DIR__ . '/vendor/plugin-update-checker/plugin-update-checker.php';
 use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
 
 $eviveUpdateChecker = PucFactory::buildUpdateChecker(
-    'https://app.evive.works/downloads/evive-connector-update.json',
+    'https://github.com/evive-works/evive-connector/',
     __FILE__,
     'evive-connector'
 );
+$eviveUpdateChecker->setBranch('main');
+$eviveUpdateChecker->getVcsApi()->enableReleaseAssets('/evive-connector\.zip$/');
 
 require_once EVIVE_PATH . 'includes/class-meta.php';
 require_once EVIVE_PATH . 'includes/class-content-map.php';

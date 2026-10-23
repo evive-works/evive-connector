@@ -41,6 +41,11 @@ you already configured in evive settings.
 
 == Changelog ==
 
+= 1.3.26 =
+* Fix (evive #369): draft preview links on a WordPress Multisite subsite opened on the main site. The preview URL is now built from home_url() of the current site instead of get_site_url('/'), whose first argument is a blog ID. Single sites get the same URL as before.
+* Feature (evive #370): the Site Profile reports the active theme (name, version, parent, block theme yes/no, theme.json, page editor elementor/block_editor/classic, the theme's own block patterns and template parts) and the Multisite context (blog ID, home URL, locale), so evive can tell a block theme site from an Elementor site.
+* Updates now come from GitHub releases (github.com/evive-works/evive-connector) instead of a manifest on app.evive.works. The release zip no longer contains .bak backup files (evive #375).
+
 = 1.0.27 =
 * Approach pivot: dropped byte-overwrite media-replace; new model re-points Elementor references
 * New: GET /evive/v1/front-page-id — returns the WP front page ID and title

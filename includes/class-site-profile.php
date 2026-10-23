@@ -293,6 +293,13 @@ class Evive_Site_Profile {
             'elementor_widget_maps' => $elementor_maps,
             'recent_media'          => $recent_media,
             'generated_at'          => gmdate('c'),
+            'theme'                 => $this->theme_profile(),
+            'multisite'             => [
+                'is_multisite' => is_multisite(),
+                'blog_id'      => get_current_blog_id(),
+                'home_url'     => home_url('/'),
+                'locale'       => get_locale(),
+            ],
             'site_url'              => get_site_url(),
             'site_name'             => get_bloginfo('name'),
             'wordpress_version'     => get_bloginfo('version'),
@@ -306,6 +313,73 @@ class Evive_Site_Profile {
         }
 
         return rest_ensure_response($result);
+    }
+
+    /**
+     * Active theme, so evive can tell a block theme (Site Editor, theme.json, patterns) from a
+     * classic or Elementor site (evive #370). Patterns and template parts are limited to the
+     * theme's own (child + parent), not WordPress core's or other plugins'.
+     */
+    private function theme_profile() {
+        $theme      = wp_get_theme();
+        $parent     = $theme->parent();
+        $is_block   = function_exists('wp_is_block_theme') && wp_is_block_theme();
+        $stylesheet = get_stylesheet();
+        $template   = get_template();
+        $own_prefix = array_unique([$stylesheet . '/', $template . '/']);
+        $own_dirs   = array_unique([wp_normalize_path(get_stylesheet_directory()) . '/', wp_normalize_path(get_template_directory()) . '/']);
+
+        // A theme's patterns: registered from a file in the theme's own folder (WordPress keeps
+        // filePath since 6.5), or named after the theme. The pattern namespace often differs
+        // from the folder name (evive-base registers evive/...), so the file path comes first.
+        $patterns = [];
+        if (class_exists('WP_Block_Patterns_Registry')) {
+            foreach (WP_Block_Patterns_Registry::get_instance()->get_all_registered() as $pattern) {
+                $name = $pattern['name'] ?? '';
+                $file = isset($pattern['filePath']) ? wp_normalize_path($pattern['filePath']) : '';
+                $own  = false;
+                foreach ($own_dirs as $dir) {
+                    if ($file !== '' && strpos($file, $dir) === 0) { $own = true; break; }
+                }
+                if (!$own) {
+                    foreach ($own_prefix as $prefix) {
+                        if (strpos($name, $prefix) === 0) { $own = true; break; }
+                    }
+                }
+                if ($own) {
+                    $patterns[] = ['name' => $name, 'title' => $pattern['title'] ?? $name];
+                }
+                if (count($patterns) >= 100) break;
+            }
+        }
+
+        $template_parts = [];
+        if ($is_block && function_exists('get_block_templates')) {
+            foreach (get_block_templates([], 'wp_template_part') as $part) {
+                $template_parts[] = ['slug' => $part->slug, 'area' => $part->area ?? null, 'theme' => $part->theme ?? null];
+            }
+        }
+
+        if (defined('ELEMENTOR_VERSION')) {
+            $editor = 'elementor';
+        } elseif ($is_block) {
+            $editor = 'block_editor';
+        } else {
+            $editor = function_exists('use_block_editor_for_post_type') && use_block_editor_for_post_type('page') ? 'block_editor' : 'classic';
+        }
+
+        return [
+            'name'           => $theme->get('Name'),
+            'version'        => $theme->get('Version'),
+            'stylesheet'     => $stylesheet,
+            'template'       => $template,
+            'parent'         => $parent ? $parent->get('Name') : null,
+            'is_block_theme' => $is_block,
+            'has_theme_json' => function_exists('wp_theme_has_theme_json') ? wp_theme_has_theme_json() : null,
+            'page_editor'    => $editor,
+            'patterns'       => $patterns,
+            'template_parts' => $template_parts,
+        ];
     }
 
     /**
