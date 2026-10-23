@@ -3,7 +3,7 @@
  * Plugin Name: evive Connector
  * Plugin URI:  https://evive.works
  * Description: Connects WordPress to evive AI for full Elementor and custom post type support.
- * Version:     1.3.25
+ * Version:     1.3.26
  * Author:      StackPros B.V.
  * License:     Proprietary
  * Requires at least: 6.0
@@ -13,7 +13,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('EVIVE_VERSION', '1.3.25');
+define('EVIVE_VERSION', '1.3.26');
 define('EVIVE_PATH', plugin_dir_path(__FILE__));
 
 // ── Auto-update from GitHub releases via Plugin Update Checker ────────────
