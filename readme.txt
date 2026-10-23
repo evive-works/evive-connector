@@ -41,6 +41,9 @@ you already configured in evive settings.
 
 == Changelog ==
 
+= 1.3.27 =
+* Feature (evive #385): GET /evive/v1/items lists the items of any post type a user may edit, including post types without REST access (e.g. a theme's portfolio). Paged (page, per_page up to 100), optional search and status (publish, draft, any), newest first, read-only. Returns items (id, title, slug, status, date), page, per_page, total_pages and next_page.
+
 = 1.3.26 =
 * Fix (evive #369): draft preview links on a WordPress Multisite subsite opened on the main site. The preview URL is now built from home_url() of the current site instead of get_site_url('/'), whose first argument is a blog ID. Single sites get the same URL as before.
 * Feature (evive #370): the Site Profile reports the active theme (name, version, parent, block theme yes/no, theme.json, page editor elementor/block_editor/classic, the theme's own block patterns and template parts) and the Multisite context (blog ID, home URL, locale), so evive can tell a block theme site from an Elementor site.
