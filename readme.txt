@@ -41,6 +41,10 @@ you already configured in evive settings.
 
 == Changelog ==
 
+= 1.3.28 =
+* Fix: GET /evive/v1/items reported total_pages 0 for a page past the last one (WordPress only counts matches when the page has posts); it now counts again on page 1.
+* Fix: titles of private items no longer get WordPress's "Private: " prefix (the status field already says so).
+
 = 1.3.27 =
 * Feature (evive #385): GET /evive/v1/items lists the items of any post type a user may edit, including post types without REST access (e.g. a theme's portfolio). Paged (page, per_page up to 100), optional search and status (publish, draft, any), newest first, read-only. Returns items (id, title, slug, status, date), page, per_page, total_pages and next_page.
 

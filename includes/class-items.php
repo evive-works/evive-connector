@@ -62,13 +62,19 @@ class Evive_Items {
         foreach ($query->posts as $p) {
             $items[] = [
                 'id'     => $p->ID,
-                'title'  => html_entity_decode(get_the_title($p), ENT_QUOTES, 'UTF-8'),
+                'title'  => html_entity_decode($p->post_title, ENT_QUOTES, 'UTF-8'), // plain title: no "Private: " prefix
                 'slug'   => $p->post_name,
                 'status' => $p->post_status,
                 'date'   => mysql2date('Y-m-d', $p->post_date),
             ];
         }
         $total_pages = (int) $query->max_num_pages;
+        // WordPress only counts the matches when the requested page has posts; past the last page it
+        // reports 0 pages. Count once more on page 1 (ids only) so total_pages stays correct.
+        if (!$query->posts && $page > 1) {
+            $probe = new WP_Query(array_merge($args, ['paged' => 1, 'fields' => 'ids']));
+            $total_pages = (int) $probe->max_num_pages;
+        }
 
         return rest_ensure_response([
             'items'       => $items,
