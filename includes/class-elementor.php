@@ -29,7 +29,11 @@ class Evive_Elementor {
         register_rest_route('evive/v1', '/search-text', [
             'methods'             => 'GET',
             'callback'            => [$this, 'search_text'],
-            'permission_callback' => '__return_true',
+            // evive #372: was public and leaked text of draft/private pages; now needs edit rights on that page.
+            'permission_callback' => function (WP_REST_Request $request) {
+                $id = (int) $request->get_param('page_id');
+                return $id > 0 && current_user_can('edit_post', $id);
+            },
             'args' => [
                 'page_id' => ['required' => true, 'validate_callback' => function ($v) { return is_numeric($v); }],
                 'query'   => ['required' => true, 'sanitize_callback' => 'sanitize_text_field'],

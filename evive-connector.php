@@ -3,7 +3,7 @@
  * Plugin Name: evive Connector
  * Plugin URI:  https://evive.works
  * Description: Connects WordPress to evive AI for full Elementor and custom post type support.
- * Version:     1.3.28
+ * Version:     1.3.29
  * Author:      StackPros B.V.
  * License:     Proprietary
  * Requires at least: 6.0
@@ -13,7 +13,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('EVIVE_VERSION', '1.3.28');
+define('EVIVE_VERSION', '1.3.29');
 define('EVIVE_PATH', plugin_dir_path(__FILE__));
 
 // ── Auto-update from GitHub releases via Plugin Update Checker ────────────
@@ -29,6 +29,23 @@ $eviveUpdateChecker = PucFactory::buildUpdateChecker(
 );
 $eviveUpdateChecker->setBranch('main');
 $eviveUpdateChecker->getVcsApi()->enableReleaseAssets('/evive-connector\.zip$/');
+
+// Permission checks for routes beyond content editing (evive #373). Return a WP_Error with a clear
+// message, so evive can tell the user why instead of a bare "forbidden".
+// Site settings, backups status and caches: a site administrator.
+function evive_can_manage_site() {
+    if (current_user_can('manage_options')) return true;
+    return new WP_Error('evive_forbidden', 'evive needs a WordPress administrator account for this.', ['status' => 403]);
+}
+// Server files (wp-config.php, .htaccess), PHP OPcache and backups: on a single site an administrator;
+// on Multisite these are shared by the whole network, so only a super admin.
+function evive_can_change_server() {
+    if (is_multisite()) {
+        if (is_super_admin()) return true;
+        return new WP_Error('evive_forbidden', 'On a Multisite network this needs a network (super) admin: it affects every site in the network.', ['status' => 403]);
+    }
+    return evive_can_manage_site();
+}
 
 require_once EVIVE_PATH . 'includes/class-meta.php';
 require_once EVIVE_PATH . 'includes/class-content-map.php';

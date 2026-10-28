@@ -39,7 +39,7 @@ class Evive_Update {
         register_rest_route('evive/v1', '/force-clear-cache', [
             'methods'             => 'POST',
             'callback'            => [$this, 'force_clear_cache'],
-            'permission_callback' => function () { return current_user_can('edit_posts'); },
+            'permission_callback' => 'evive_can_manage_site', // evive #373: site-wide cache
         ]);
     }
 

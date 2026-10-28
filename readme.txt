@@ -41,6 +41,10 @@ you already configured in evive settings.
 
 == Changelog ==
 
+= 1.3.29 =
+* Security (evive #372): GET /evive/v1/search-text was public and could return text of draft, private and password-protected Elementor pages. It now needs edit rights on that page.
+* Security (evive #373): backup, cache and server-file routes needed only edit_posts (a Contributor). Backup status/list and the site cache now need an administrator. Backup create/delete, wp-config.php and .htaccess fixes and the OPcache reset need an administrator on a single site, and a network (super) admin on Multisite, because those files and the backup are shared by the whole network.
+
 = 1.3.28 =
 * Fix: GET /evive/v1/items reported total_pages 0 for a page past the last one (WordPress only counts matches when the page has posts); it now counts again on page 1.
 * Fix: titles of private items no longer get WordPress's "Private: " prefix (the status field already says so).

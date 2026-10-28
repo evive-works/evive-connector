@@ -19,7 +19,7 @@ class EVIVE_RevSlider {
         register_rest_route('evive/v1', '/opcache-reset', [
             'methods'             => 'POST',
             'callback'            => [$this, 'opcache_reset_handler'],
-            'permission_callback' => $auth,
+            'permission_callback' => 'evive_can_change_server', // evive #373: PHP OPcache is server-wide
         ]);
         register_rest_route('evive/v1', '/revslider/update-slide-image', [
             'methods'             => 'POST',

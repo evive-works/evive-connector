@@ -3,7 +3,9 @@
 class Evive_Backup {
 
     public function register_routes() {
-        $auth = function () { return current_user_can( 'edit_posts' ); };
+        // evive #373: was edit_posts (a Contributor) for every route here.
+        $auth   = 'evive_can_manage_site';   // status, list
+        $server = 'evive_can_change_server'; // create, delete, wp-config.php, .htaccess
 
         register_rest_route( 'evive/v1', '/backup/status', array(
             'methods'             => 'GET',
@@ -18,12 +20,12 @@ class Evive_Backup {
         register_rest_route( 'evive/v1', '/backup/create', array(
             'methods'             => 'POST',
             'callback'            => array( $this, 'create_backup' ),
-            'permission_callback' => $auth,
+            'permission_callback' => $server,
         ) );
         register_rest_route( 'evive/v1', '/backup/(?P<timestamp>[0-9]+)', array(
             'methods'             => 'DELETE',
             'callback'            => array( $this, 'delete_backup' ),
-            'permission_callback' => $auth,
+            'permission_callback' => $server,
             'args'                => array(
                 'timestamp' => array(
                     'validate_callback' => function ( $v ) { return is_numeric( $v ) && (int) $v > 0; },
@@ -34,17 +36,17 @@ class Evive_Backup {
         register_rest_route( 'evive/v1', '/backup/fix-litespeed', array(
             'methods'             => 'POST',
             'callback'            => array( $this, 'fix_litespeed' ),
-            'permission_callback' => $auth,
+            'permission_callback' => $server,
         ) );
         register_rest_route( 'evive/v1', '/backup/fix-wp-config', array(
             'methods'             => 'POST',
             'callback'            => array( $this, 'fix_wp_config' ),
-            'permission_callback' => $auth,
+            'permission_callback' => $server,
         ) );
         register_rest_route( 'evive/v1', '/backup/create-direct', array(
             'methods'             => 'POST',
             'callback'            => array( $this, 'create_backup_direct' ),
-            'permission_callback' => $auth,
+            'permission_callback' => $server,
         ) );
     }
 
