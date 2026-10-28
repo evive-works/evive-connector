@@ -4,8 +4,11 @@ class Evive_Backup {
 
     public function register_routes() {
         // evive #373: was edit_posts (a Contributor) for every route here.
-        $auth   = 'evive_can_manage_site';   // status, list
-        $server = 'evive_can_change_server'; // create, delete, wp-config.php, .htaccess
+        // Creating a backup only reads data, and it is evive's safety net before bigger changes, so a site
+        // administrator may start one, also on Multisite (where the backup covers the whole network).
+        // Deleting backups and writing shared server files stay with the network (super) admin there.
+        $auth   = 'evive_can_manage_site';   // status, list, create
+        $server = 'evive_can_change_server'; // delete, wp-config.php, .htaccess
 
         register_rest_route( 'evive/v1', '/backup/status', array(
             'methods'             => 'GET',
@@ -20,7 +23,7 @@ class Evive_Backup {
         register_rest_route( 'evive/v1', '/backup/create', array(
             'methods'             => 'POST',
             'callback'            => array( $this, 'create_backup' ),
-            'permission_callback' => $server,
+            'permission_callback' => $auth,
         ) );
         register_rest_route( 'evive/v1', '/backup/(?P<timestamp>[0-9]+)', array(
             'methods'             => 'DELETE',
@@ -46,7 +49,7 @@ class Evive_Backup {
         register_rest_route( 'evive/v1', '/backup/create-direct', array(
             'methods'             => 'POST',
             'callback'            => array( $this, 'create_backup_direct' ),
-            'permission_callback' => $server,
+            'permission_callback' => $auth,
         ) );
     }
 

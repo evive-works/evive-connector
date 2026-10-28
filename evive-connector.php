@@ -3,7 +3,7 @@
  * Plugin Name: evive Connector
  * Plugin URI:  https://evive.works
  * Description: Connects WordPress to evive AI for full Elementor and custom post type support.
- * Version:     1.3.29
+ * Version:     1.3.30
  * Author:      StackPros B.V.
  * License:     Proprietary
  * Requires at least: 6.0
@@ -13,7 +13,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('EVIVE_VERSION', '1.3.29');
+define('EVIVE_VERSION', '1.3.30');
 define('EVIVE_PATH', plugin_dir_path(__FILE__));
 
 // ── Auto-update from GitHub releases via Plugin Update Checker ────────────
@@ -37,7 +37,7 @@ function evive_can_manage_site() {
     if (current_user_can('manage_options')) return true;
     return new WP_Error('evive_forbidden', 'evive needs a WordPress administrator account for this.', ['status' => 403]);
 }
-// Server files (wp-config.php, .htaccess), PHP OPcache and backups: on a single site an administrator;
+// Server files (wp-config.php, .htaccess), PHP OPcache and deleting backups: on a single site an administrator;
 // on Multisite these are shared by the whole network, so only a super admin.
 function evive_can_change_server() {
     if (is_multisite()) {

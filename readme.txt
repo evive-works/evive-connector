@@ -41,6 +41,9 @@ you already configured in evive settings.
 
 == Changelog ==
 
+= 1.3.30 =
+* Change (evive #373): a site administrator may create a backup again, also on Multisite (where the backup covers the whole network), so evive can always make its safety-net backup. Deleting backups, wp-config.php and .htaccess fixes and the OPcache reset still need a network (super) admin on Multisite.
+
 = 1.3.29 =
 * Security (evive #372): GET /evive/v1/search-text was public and could return text of draft, private and password-protected Elementor pages. It now needs edit rights on that page.
 * Security (evive #373): backup, cache and server-file routes needed only edit_posts (a Contributor). Backup status/list and the site cache now need an administrator. Backup create/delete, wp-config.php and .htaccess fixes and the OPcache reset need an administrator on a single site, and a network (super) admin on Multisite, because those files and the backup are shared by the whole network.
