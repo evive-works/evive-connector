@@ -1,0 +1,55 @@
+/* evive #522: the block editor knows the eviveTweak attribute (set by evive's tweak mode), so it is kept when the page
+ * is saved in the editor. The saved block HTML is not changed (the Connector renders the tweak as CSS on the front end),
+ * so blocks never show "unexpected content". A small sidebar panel shows the tweak and can remove it. */
+(function (wp) {
+  if (!wp || !wp.hooks || !wp.compose || !wp.element) return;
+  var el = wp.element.createElement;
+  var Fragment = wp.element.Fragment;
+  var be = wp.blockEditor || wp.editor || {};
+  var c = wp.components || {};
+  var SIZES = { desktop: 'Desktop', tablet: 'Tablet', phone: 'Phone' };
+
+  wp.hooks.addFilter('blocks.registerBlockType', 'evive/tweak-attribute', function (settings) {
+    var attrs = settings.attributes || {};
+    if (attrs.eviveTweak) return settings;
+    return Object.assign({}, settings, {
+      attributes: Object.assign({}, attrs, { eviveTweak: { type: 'object' } })
+    });
+  });
+
+  function summary(t) {
+    var out = [];
+    Object.keys(SIZES).forEach(function (s) {
+      var v = t && t[s];
+      if (!v) return;
+      var parts = [];
+      if (v.hidden) parts.push('hidden');
+      if (v.x || v.y) parts.push('moved ' + (v.x || 0) + ', ' + (v.y || 0));
+      if (v.width) parts.push('width ' + v.width + '%');
+      if (parts.length) out.push(SIZES[s] + ': ' + parts.join(', '));
+    });
+    return out;
+  }
+
+  if (!be.InspectorControls || !c.PanelBody || !c.Button) return;
+  var withPanel = wp.compose.createHigherOrderComponent(function (BlockEdit) {
+    return function (props) {
+      var lines = summary(props.attributes && props.attributes.eviveTweak);
+      if (!props.isSelected || !lines.length) return el(BlockEdit, props);
+      return el(Fragment, null,
+        el(BlockEdit, props),
+        el(be.InspectorControls, null,
+          el(c.PanelBody, { title: 'evive tweak', initialOpen: true },
+            lines.map(function (l, i) { return el('p', { key: i, style: { margin: '0 0 4px' } }, l); }),
+            el('p', { style: { margin: '8px 0', color: '#757575' } }, 'Set in evive’s tweak mode; shown on the site, not in the editor.'),
+            el(c.Button, {
+              variant: 'secondary', isDestructive: true,
+              onClick: function () { props.setAttributes({ eviveTweak: undefined }); }
+            }, 'Remove tweak')
+          )
+        )
+      );
+    };
+  }, 'withEviveTweakPanel');
+  wp.hooks.addFilter('editor.BlockEdit', 'evive/tweak-panel', withPanel);
+})(window.wp);

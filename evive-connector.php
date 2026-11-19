@@ -64,6 +64,7 @@ require_once EVIVE_PATH . 'includes/class-seo-compat.php';
 require_once EVIVE_PATH . 'includes/class-faq-schema.php';
 require_once EVIVE_PATH . 'includes/class-cf7-form.php';
 require_once EVIVE_PATH . 'includes/class-items.php';
+require_once EVIVE_PATH . 'includes/class-tweak.php'; // evive #522: tweak mode + eviveTweak attribute
 
 add_action('rest_api_init', function () {
     (new Evive_Content_Map())->register_routes();

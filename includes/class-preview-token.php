@@ -40,10 +40,25 @@ class Evive_Preview_Token {
             'post_id'       => $post_id,
         ], home_url('/'));
 
-        return rest_ensure_response([
+        $response = [
             'preview_url' => $preview_url,
             'expires_at'  => gmdate('Y-m-d\TH:i:s\Z', $expires),
-        ]);
+        ];
+
+        // Tweak mode (evive #522): the evive app sends its own short-lived tweak_token (and the tweak_endpoint the
+        // overlay posts the tweaks to). Optional; without it this route answers exactly as before.
+        $tweak_token = $request->get_param('tweak_token');
+        if ($tweak_token !== null && $tweak_token !== '') {
+            if (!current_user_can('edit_post', $post_id)) {
+                return new WP_Error('evive_forbidden', 'Tweak mode needs edit rights on this page.', ['status' => 403]);
+            }
+            [$tweak_expires, $err] = Evive_Tweak::store_token($post_id, $tweak_token, (string) $request->get_param('tweak_endpoint'));
+            if ($err) return new WP_Error('invalid_tweak', $err, ['status' => 400]);
+            $response['tweak_url']        = add_query_arg('evive_tweak', $tweak_token, $preview_url);
+            $response['tweak_expires_at'] = gmdate('Y-m-d\TH:i:s\Z', $tweak_expires);
+        }
+
+        return rest_ensure_response($response);
     }
 
     /**
@@ -119,6 +134,7 @@ class Evive_Preview_Token {
 
         // Preview banner injected before </body> — non-intrusive debug strip
         add_action('wp_footer', function () use ($post_id, $expires) {
+            if (Evive_Tweak::is_frame()) return; // tweak mode has its own toolbar (evive #522)
             $exp_local = date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $expires);
             echo '<div style="position:fixed;bottom:0;left:0;right:0;z-index:99999;'
                . 'background:#1a3a2a;color:#c8f535;font-family:sans-serif;font-size:12px;'
@@ -129,7 +145,7 @@ class Evive_Preview_Token {
         }, 999);
     }
 
-    private static function render_preview_error(string $title, string $message): void {
+    public static function render_preview_error(string $title, string $message): void {
         status_header(410);
         nocache_headers();
         ?>

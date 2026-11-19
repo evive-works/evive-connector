@@ -1,0 +1,17 @@
+/* evive #522: tweak mode overlay inside the preview frame (only loaded in tweak mode). */
+html.evt-on [data-evive-path] { cursor: pointer; }
+html.evt-on .evt-hover { outline: 1px dashed #2d7ff9 !important; outline-offset: 0; }
+html.evt-dragging, html.evt-dragging * { user-select: none !important; cursor: grabbing !important; }
+#evt-box {
+  position: absolute; z-index: 2147483646; box-sizing: border-box;
+  border: 2px solid #2d7ff9; cursor: move; touch-action: none; background: rgba(45, 127, 249, .04);
+}
+#evt-box[hidden] { display: none; }
+#evt-box .evt-h {
+  position: absolute; width: 12px; height: 12px; box-sizing: border-box;
+  background: #fff; border: 2px solid #2d7ff9; border-radius: 2px; touch-action: none;
+}
+#evt-box .evt-h-nw { left: -7px; top: -7px; cursor: nwse-resize; }
+#evt-box .evt-h-ne { right: -7px; top: -7px; cursor: nesw-resize; }
+#evt-box .evt-h-sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
+#evt-box .evt-h-se { right: -7px; bottom: -7px; cursor: nwse-resize; }
