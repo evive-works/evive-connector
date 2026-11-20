@@ -15,6 +15,22 @@ class Evive_Preview_Token {
         ]);
     }
 
+    /** Lifetime of a draft preview link in seconds (evive #528): 8 hours, filter evive_preview_ttl. At least 1 minute. */
+    public static function ttl(): int {
+        return max(MINUTE_IN_SECONDS, (int) apply_filters('evive_preview_ttl', 8 * HOUR_IN_SECONDS));
+    }
+
+    /** The lifetime in words for the texts, e.g. "8 hours", "1 hour", "30 minutes" (evive #528). */
+    public static function ttl_text(): string {
+        $ttl = self::ttl();
+        if ($ttl % HOUR_IN_SECONDS === 0) {
+            $h = intdiv($ttl, HOUR_IN_SECONDS);
+            return $h . ($h === 1 ? ' hour' : ' hours');
+        }
+        $m = max(1, intdiv($ttl, MINUTE_IN_SECONDS));
+        return $m . ($m === 1 ? ' minute' : ' minutes');
+    }
+
     public function generate_token(WP_REST_Request $request) {
         $post_type = $request->get_param('post_type');
         $post_id   = (int) $request->get_param('id');
@@ -24,11 +40,14 @@ class Evive_Preview_Token {
             return new WP_Error('not_found', 'Post not found', ['status' => 404]);
         }
 
-        // Cryptographically random 32-character hex token
-        $token   = bin2hex(random_bytes(16));
-        $expires = time() + 3600;
+        // One token per post. evive #528: a post that still has a valid token keeps it and only its expiry moves to
+        // now + TTL (sliding), so the earlier "View draft" links in the chat keep working. A new cryptographically
+        // random 32-character hex token only when there is none or it has expired.
+        $stored     = (string) get_post_meta($post_id, '_evive_preview_token', true);
+        $stored_exp = (int) get_post_meta($post_id, '_evive_preview_token_expires', true);
+        $token      = (preg_match('/^[a-f0-9]{32}$/', $stored) && time() <= $stored_exp) ? $stored : bin2hex(random_bytes(16));
+        $expires    = time() + self::ttl();
 
-        // One token per post — overwriting invalidates any previous token
         update_post_meta($post_id, '_evive_preview_token',         $token);
         update_post_meta($post_id, '_evive_preview_token_expires', $expires);
 
@@ -121,7 +140,7 @@ class Evive_Preview_Token {
         if (time() > $expires) {
             self::render_preview_error(
                 'Preview link expired',
-                'This preview link has expired (links are valid for 1 hour). Ask evive to generate a fresh preview.'
+                'This preview link has expired (links are valid for ' . self::ttl_text() . '). Ask evive to generate a fresh preview.' // evive #528
             );
         }
 

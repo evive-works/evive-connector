@@ -2,6 +2,14 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
+## Unreleased
+
+- Draft preview links last 8 hours instead of 1 (filter `evive_preview_ttl`, seconds, default `8 * HOUR_IN_SECONDS`)
+  and stay valid: `POST /evive/v1/preview-token/{type}/{id}` for a post that still has a valid token returns the same
+  token (same `preview_url`) with `expires_at` moved to now + TTL; a new token only when none is valid, so earlier
+  "View draft" links in the chat keep working. The "expired" page names the lifetime from the setting. Tweak tokens
+  (#522) unchanged (evive #528).
+
 ## 1.4.0 — 2026-11-19
 
 - Tweak mode in the draft preview (evive #522, design #520). `POST /evive/v1/preview-token/{type}/{id}` takes optional
