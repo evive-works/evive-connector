@@ -126,8 +126,12 @@ class Evive_Tweak {
     }
 
     /**
-     * evive #532: what the extra space of a section is added to, from the block's own attributes:
-     *   top / bottom: its own padding on that side as CSS ('' = none set in the block),
+     * evive #532: what the extra space of a section is added to:
+     *   top / bottom: its padding on that side as CSS, resolved like WordPress does: the block's own padding attribute,
+     *     else its style variation in the global styles (theme.json, e.g. evive-base's is-style-card), else the block
+     *     type's global styles, else core's default (cover 1em, a group/columns with a background 1.25em), else ''
+     *     (= 0). Padding the theme sets only in its own stylesheet is not seen (it stays 0 + n steps).
+     *   cover: a cover block (its media is clipped to the padding box),
      *   cover: a cover block (its media is clipped to the padding box),
      *   minh: its own minimum height as CSS ('' = none).
      */
@@ -135,8 +139,27 @@ class Evive_Tweak {
         $a   = $block['attrs'] ?? [];
         $pad = $a['style']['spacing']['padding'] ?? null;
         $out = ['top' => '', 'bottom' => '', 'cover' => ($block['blockName'] ?? '') === 'core/cover', 'minh' => ''];
+        $name = (string) ($block['blockName'] ?? '');
+        $global = [];
+        if ($name !== '' && function_exists('wp_get_global_styles')) {
+            $bs = wp_get_global_styles(['blocks', $name]);
+            $bs = is_array($bs) ? $bs : [];
+            // The block's style variation (is-style-<name>) wins over the block type's own global styles.
+            if (preg_match('/(?:^|\s)is-style-([a-z0-9_-]+)/i', (string) ($a['className'] ?? ''), $m)
+                && isset($bs['variations'][$m[1]]['spacing']['padding'])) {
+                $global = $bs['variations'][$m[1]]['spacing']['padding'];
+            } elseif (isset($bs['spacing']['padding'])) {
+                $global = $bs['spacing']['padding'];
+            }
+        }
+        $has_bg = !empty($a['backgroundColor']) || !empty($a['gradient'])
+            || !empty($a['style']['color']['background']) || !empty($a['style']['color']['gradient']);
         foreach (['top', 'bottom'] as $side) {
-            $out[$side] = self::css_value(is_array($pad) ? ($pad[$side] ?? null) : $pad);
+            $v = self::css_value(is_array($pad) ? ($pad[$side] ?? null) : $pad);
+            if ($v === '' && $global !== []) $v = self::css_value(is_array($global) ? ($global[$side] ?? null) : $global);
+            if ($v === '' && $name === 'core/cover') $v = '1em';
+            if ($v === '' && $has_bg && in_array($name, ['core/group', 'core/columns'], true)) $v = '1.25em';
+            $out[$side] = $v;
         }
         if ($out['cover'] && isset($a['minHeight']) && is_numeric($a['minHeight'])) {
             $unit = preg_match('/^(px|em|rem|vh|vw|%|svh|dvh|lvh)$/', (string) ($a['minHeightUnit'] ?? 'px')) ? ($a['minHeightUnit'] ?? 'px') : 'px';
@@ -149,9 +172,9 @@ class Evive_Tweak {
 
     /**
      * evive #532: CSS declarations for the extra space of one screen size. The same rules are built in tweak-frame.js.
-     * Own padding set in the block: padding = calc(own + n steps). Otherwise a cover block gets calc(1em + n steps)
-     * (core's default cover padding) and any other block a transparent border of n steps, which shows the block's
-     * background and leaves the padding of the theme alone. A block with its own minimum height gets that much more.
+     * padding = calc(resolved padding + n steps), see space_base(); it never touches the block's border (a border set
+     * in the block, or a style variation's hairline, stays as it is). A block with its own minimum height gets that
+     * much more.
      */
     public static function space_rules(array $t, array $base) {
         $rules = [];
@@ -162,11 +185,8 @@ class Evive_Tweak {
             $total += $n;
             $own = $base[$side] ?? '';
             if ($own === '' && !empty($base['cover'])) $own = '1em';
-            if ($own !== '') {
-                $rules[] = sprintf('padding-%s:calc(%s + %d * var(--evive-tweak-step)) !important', $side, $own, $n);
-            } else {
-                $rules[] = sprintf('border-%s:calc(%d * var(--evive-tweak-step)) solid transparent', $side, $n);
-            }
+            if ($own === '') $own = '0px';
+            $rules[] = sprintf('padding-%s:calc(%s + %d * var(--evive-tweak-step)) !important', $side, $own, $n);
         }
         if ($total && !empty($base['minh'])) {
             $rules[] = sprintf('min-height:calc(%s + %d * var(--evive-tweak-step)) !important', $base['minh'], $total);

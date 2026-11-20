@@ -167,8 +167,8 @@
       total += n;
       var own = base[side] || '';
       if (!own && base.cover) own = '1em';
-      if (own) r.push('padding-' + side + ':calc(' + own + ' + ' + n + ' * var(--evive-tweak-step, 0.5rem)) !important');
-      else r.push('border-' + side + ':calc(' + n + ' * var(--evive-tweak-step, 0.5rem)) solid transparent');
+      if (!own) own = '0px';
+      r.push('padding-' + side + ':calc(' + own + ' + ' + n + ' * var(--evive-tweak-step, 0.5rem)) !important');
     });
     if (total && base.minh) r.push('min-height:calc(' + base.minh + ' + ' + total + ' * var(--evive-tweak-step, 0.5rem)) !important');
     return r;
@@ -341,7 +341,7 @@
       var t = JSON.parse(JSON.stringify(st.tweak));
       delete t[device];
       st.tweak = clean(t);
-      render(); notify();
+      render(); place(); notify(); // evive #532: the box follows at once
     },
     changes: changes,
     info: info,
