@@ -16,6 +16,8 @@ Add your change under "## Unreleased" at the top; the release gate turns it into
   button counts text edits with the tweaks; Reset undoes a block's text edit first, then its tweak on that size.
   A second click on a selected block selects its parent after 400 ms (so a double-click does not jump to it).
   Drafts only, like the other tweaks.
+  Opening an edit and leaving it without typing is not a change, also when the saved text holds markup outside that
+  list (code, a link's class or data-id): nothing is sent, so that markup stays.
 
 ## 1.4.2 — 2026-11-20
 

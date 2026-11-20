@@ -202,10 +202,14 @@
     return d.innerHTML.replace(/&nbsp;/g, ' ').replace(/[\s\u00a0]+/g, ' ').replace(/ ?<br> ?/g, '<br>').trim();
   }
 
+  // evive #533: both sides cleaned, so markup outside KEEP in the saved text (code, a link's data-id or class)
+  // does not count as a change when nothing was typed.
+  function sameText(a, b) { return canon(cleanHtml(a)) === canon(cleanHtml(b)); }
+
   function textChanged(st) {
     if (!st.text) return false;
-    var after = editing && state[editing.path] === st ? cleanHtml(editing.el.innerHTML) : st.text.after; // live while typing
-    return canon(after) !== canon(st.text.before);
+    var after = editing && state[editing.path] === st ? editing.el.innerHTML : st.text.after; // live while typing
+    return !sameText(after, st.text.before);
   }
 
   function startEdit(node, x, y) {
@@ -240,7 +244,7 @@
     editing = null;
     var after = cleanHtml(ed.el.innerHTML);
     if (!ed.el.textContent.trim()) after = st.text.after; // never save an empty text: keep the last one
-    st.text.after = canon(after) === canon(st.text.before) ? st.text.before : after;
+    st.text.after = sameText(after, st.text.before) ? st.text.before : after;
     ed.el.innerHTML = textChanged(st) ? st.text.after : st.text.shown;
     ed.el.removeAttribute('contenteditable');
     ed.el.removeAttribute('spellcheck');
