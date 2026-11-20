@@ -2,7 +2,7 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
-## Unreleased
+## 1.4.1 — 2026-11-20
 
 - Draft preview links last 8 hours instead of 1 (filter `evive_preview_ttl`, seconds, default `8 * HOUR_IN_SECONDS`)
   and stay valid: `POST /evive/v1/preview-token/{type}/{id}` for a post that still has a valid token returns the same
