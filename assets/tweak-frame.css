@@ -21,3 +21,19 @@ html.evt-dragging, html.evt-dragging * { user-select: none !important; cursor: g
 #evt-box .evt-h-s { bottom: -6px; }
 #evt-box.evt-section .evt-h-n, #evt-box.evt-section .evt-h-s { display: block; }
 #evt-box.evt-section .evt-h-nw, #evt-box.evt-section .evt-h-ne, #evt-box.evt-section .evt-h-sw, #evt-box.evt-section .evt-h-se { display: none; }
+/* evive #533: text editing in place. */
+html.evt-on .evt-text { cursor: text; }
+html.evt-on .evt-editing { outline: 2px solid #c8f535 !important; outline-offset: 2px; cursor: text !important; user-select: text !important; -webkit-user-select: text !important; caret-color: auto; }
+html.evt-on .evt-editing * { user-select: text !important; -webkit-user-select: text !important; pointer-events: auto !important; }
+#evt-textbar {
+  position: absolute; z-index: 2147483647; display: flex; gap: 2px; padding: 3px; border-radius: 6px;
+  background: #1a3a2a; box-shadow: 0 2px 8px rgba(0, 0, 0, .25); font: 13px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+#evt-textbar[hidden] { display: none; }
+#evt-textbar button {
+  font: inherit; min-width: 32px; min-height: 30px; padding: 4px 8px; border: 0; border-radius: 4px;
+  background: #24493a; color: #fff; cursor: pointer;
+}
+#evt-textbar button[data-cmd="bold"] { font-weight: 700; }
+#evt-textbar button[data-cmd="italic"] { font-style: italic; }
+#evt-textbar button[data-cmd="done"] { background: #c8f535; color: #1a3a2a; }

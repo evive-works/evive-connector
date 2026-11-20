@@ -38,8 +38,12 @@
   }
 
   function describe(i) {
-    if (!i) return 'Click a block to select it';
+    if (!i) return 'Click a block to select it, double-click text to edit it';
+    // evive #533: text editing
+    if (i.editing) return (i.block || 'block').replace(/^core\//, '') + ': editing text (' +
+      (/^core\/(heading|button|list-item|image)$/.test(i.block) ? 'Enter' : 'Esc or click outside') + ' ends)';
     var t = i.tweak || {}, parts = [];
+    if (i.textChanged) parts.push('text edited');
     if (t.hidden) parts.push('hidden');
     if (t.x || t.y) parts.push('moved ' + (t.x || 0) + ', ' + (t.y || 0));
     if (t.width) parts.push(t.width + '%');
@@ -60,6 +64,7 @@
       ['smaller', 'bigger'].forEach(function (a) { document.querySelector('[data-act="' + a + '"]').hidden = section; });
       ['shorter', 'taller'].forEach(function (a) { document.querySelector('[data-act="' + a + '"]').hidden = !section; });
       if (section) document.querySelector('[data-act="shorter"]').disabled = !((info.tweak || {}).bottom > 0);
+      if (info && (!info.hasText || info.editing)) document.querySelector('[data-act="edittext"]').disabled = true; // evive #533
       hidePhone.setAttribute('aria-pressed', info && info.phoneHidden ? 'true' : 'false');
       dirty = count;
       save.textContent = count ? 'Save (' + count + ')' : 'Save';
@@ -82,6 +87,7 @@
     if (a === 'shorter') api.space(e.shiftKey ? -5 : -1);
     if (a === 'hidephone') api.togglePhoneHidden();
     if (a === 'reset') api.reset();
+    if (a === 'edittext' && api.editText) api.editText(); // evive #533
   });
   // Keys also work while the focus is on the toolbar.
   document.addEventListener('keydown', function (e) { if (api && api.key(e)) e.preventDefault(); });

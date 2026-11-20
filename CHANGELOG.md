@@ -2,6 +2,21 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
+## Unreleased
+
+- Tweak mode: edit text in place (evive #533). Double-click a heading, paragraph, list item, button or image caption
+  (or select it and press F2 / Enter, or "Edit text") to edit its text right in the preview. Enter ends a heading,
+  button, list item or caption edit; in a paragraph Enter is a line break and Esc or a click outside ends it. A small
+  bar offers Bold, Italic and Link; Ctrl+B / I / K work too. Paste and drop are always plain text. Only inline
+  formatting is kept (strong, b, em, i, a[href,target,rel], mark/span[class,style], br, s, sub, sup).
+  In the tweak frame each text block gets `data-evive-text`: the saved inner HTML of its text element (from
+  post_content, before wptexturize and other filters), which is what the user edits. Save sends a text change as
+  `{path, block, text: {before, after}}` (also together with `tweak` on the same block; contract of #533/#534) to the
+  tweak endpoint; the evive app and MCP apply it (#534, #535) and refuse it when the page changed meanwhile. The Save
+  button counts text edits with the tweaks; Reset undoes a block's text edit first, then its tweak on that size.
+  A second click on a selected block selects its parent after 400 ms (so a double-click does not jump to it).
+  Drafts only, like the other tweaks.
+
 ## 1.4.2 — 2026-11-20
 
 - Tweak mode: make a section taller or shorter (evive #532). `eviveTweak.{desktop|tablet|phone}` learns `top` and

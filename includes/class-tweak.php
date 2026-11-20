@@ -264,6 +264,8 @@ class Evive_Tweak {
             if ($base['top'] !== '' || $base['bottom'] !== '' || $base['cover'] || $base['minh'] !== '') {
                 $set['data-evive-space'] = wp_json_encode($base);
             }
+            $text = self::text_source($block);
+            if ($text !== null) $set['data-evive-text'] = $text;
         }
         return self::add_to_first_tag($content, $add_class, $set);
     }
@@ -272,6 +274,28 @@ class Evive_Tweak {
     private static function has_space(array $tweak) {
         foreach ($tweak as $t) if (!empty($t['top']) || !empty($t['bottom'])) return true;
         return false;
+    }
+
+    /** evive #533: the text element of each block type that can be edited in place (tag pattern in the saved HTML). */
+    const TEXT_ELEMENTS = [
+        'core/heading'   => 'h[1-6]',
+        'core/paragraph' => 'p',
+        'core/list-item' => 'li',
+        'core/button'    => 'a|button',
+        'core/image'     => 'figcaption',
+    ];
+
+    /**
+     * evive #533: the inner HTML of a block's text element as it is saved in post_content (before wptexturize and other
+     * content filters), or null when the block has no editable text (not a text block, holds other blocks, no such
+     * element). The overlay edits this source and sends it back as text.before, so the evive MCP finds it unchanged.
+     */
+    public static function text_source($block) {
+        $name = $block['blockName'] ?? '';
+        if (!isset(self::TEXT_ELEMENTS[$name]) || !empty($block['innerBlocks'])) return null;
+        $html = (string) ($block['innerHTML'] ?? '');
+        if (!preg_match('#<(' . self::TEXT_ELEMENTS[$name] . ')\b[^>]*>(.*)</\1\s*>#is', $html, $m)) return null;
+        return $m[2];
     }
 
     /** Add a class and attributes to the first HTML tag of a block's output. */
@@ -443,13 +467,14 @@ class Evive_Tweak {
   </div>
   <div class="evt-group evt-sel" id="evt-sel">Click a block to select it</div>
   <div class="evt-group" id="evt-tools">
+    <button type="button" data-act="edittext" title="Edit the text of this block (or double-click it)">Edit text</button>
     <button type="button" data-act="parent" title="Select the parent block (click the block again)">Parent</button>
     <button type="button" data-act="smaller" title="Smaller (5 %)">&minus;</button>
     <button type="button" data-act="bigger" title="Bigger (5 %)">+</button>
     <button type="button" data-act="shorter" title="Less space at the bottom (Shift: 5 steps)" hidden>Shorter</button>
     <button type="button" data-act="taller" title="More space at the bottom (Shift: 5 steps)" hidden>Taller</button>
     <button type="button" data-act="hidephone" aria-pressed="false" title="Hide this block on phones">Hide on phone</button>
-    <button type="button" data-act="reset" title="Undo the tweaks of this block on this screen size">Reset</button>
+    <button type="button" data-act="reset" title="Undo the text edit of this block, or else its tweaks on this screen size">Reset</button>
   </div>
   <div class="evt-group">
     <button type="button" id="evt-save" class="evt-primary" disabled>Save</button>
