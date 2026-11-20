@@ -188,6 +188,7 @@
     t[device] = Object.assign({}, t[device] || {}, patch);
     st.tweak = clean(t);
     render();
+    place(); // evive #532: the box (and its edge handles) follow the new size at once
     notify();
   }
 
