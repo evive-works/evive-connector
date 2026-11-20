@@ -2,7 +2,7 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
-## Unreleased
+## 1.4.2 — 2026-11-20
 
 - Tweak mode: make a section taller or shorter (evive #532). `eviveTweak.{desktop|tablet|phone}` learns `top` and
   `bottom`: extra space at the top / bottom in steps of `--evive-tweak-step`, whole numbers 0..40 (0 = none). It is added
