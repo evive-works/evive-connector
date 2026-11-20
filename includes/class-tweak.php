@@ -129,8 +129,9 @@ class Evive_Tweak {
      * evive #532: what the extra space of a section is added to:
      *   top / bottom: its padding on that side as CSS, resolved like WordPress does: the block's own padding attribute,
      *     else its style variation in the global styles (theme.json, e.g. evive-base's is-style-card), else the block
-     *     type's global styles, else core's default (cover 1em, a group/columns with a background 1.25em), else ''
-     *     (= 0). Padding the theme sets only in its own stylesheet is not seen (it stays 0 + n steps).
+     *     type's global styles, else core's default for a cover (1em), else '' (= 0; measured under evive-base: a
+     *     group with a background has no padding of its own). Padding a theme sets only in its own stylesheet is not
+     *     seen (it becomes 0 + n steps).
      *   cover: a cover block (its media is clipped to the padding box),
      *   cover: a cover block (its media is clipped to the padding box),
      *   minh: its own minimum height as CSS ('' = none).
@@ -152,13 +153,10 @@ class Evive_Tweak {
                 $global = $bs['spacing']['padding'];
             }
         }
-        $has_bg = !empty($a['backgroundColor']) || !empty($a['gradient'])
-            || !empty($a['style']['color']['background']) || !empty($a['style']['color']['gradient']);
         foreach (['top', 'bottom'] as $side) {
             $v = self::css_value(is_array($pad) ? ($pad[$side] ?? null) : $pad);
             if ($v === '' && $global !== []) $v = self::css_value(is_array($global) ? ($global[$side] ?? null) : $global);
             if ($v === '' && $name === 'core/cover') $v = '1em';
-            if ($v === '' && $has_bg && in_array($name, ['core/group', 'core/columns'], true)) $v = '1.25em';
             $out[$side] = $v;
         }
         if ($out['cover'] && isset($a['minHeight']) && is_numeric($a['minHeight'])) {

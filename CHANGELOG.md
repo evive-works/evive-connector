@@ -8,7 +8,7 @@ Add your change under "## Unreleased" at the top; the release gate turns it into
   `bottom`: extra space at the top / bottom in steps of `--evive-tweak-step`, whole numbers 0..40 (0 = none). It is added
   to the block's padding (`padding-*: calc(own + n steps) !important`), own resolved like WordPress does: the block's
   padding attribute, else its style variation in the global styles (e.g. evive-base's Card), else the block type's
-  global styles, else core's default (cover 1em, a group/columns with a background 1.25em), else 0. Borders are never
+  global styles, else core's cover default (1em), else 0. Borders are never
   touched (a border set in the block, or the Card hairline, stays). A block with its own minimum height (cover `minHeight`, `style.dimensions.minHeight`) gets
   that much more, so a short cover still grows. In the overlay a section (cover, columns, wide/full-width block, or a
   top-level block with its own background) shows **Taller / Shorter** (space at the bottom; Shift = 5 steps; also the
