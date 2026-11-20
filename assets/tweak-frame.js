@@ -153,7 +153,10 @@
     var ar = getComputedStyle(node).aspectRatio;
     if (ar && ar !== 'auto') return false;
     if (name === 'core/cover' || name === 'core/columns') return true;
-    if (node.classList.contains('alignfull') || node.classList.contains('alignwide')) return true;
+    // Media blocks are never a section, also when wide or full width: they keep -/+ and the corners.
+    if (/^core\/(image|video|audio|embed|gallery)$/.test(name)) return false;
+    // Wide or full width only makes a container (a group) a section, not any block.
+    if (name === 'core/group' && (node.classList.contains('alignfull') || node.classList.contains('alignwide'))) return true;
     if ((pathOf(node) || '').indexOf('.') >= 0) return false;
     if (node.classList.contains('has-background')) return true;
     var cs = getComputedStyle(node);
