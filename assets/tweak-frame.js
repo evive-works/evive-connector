@@ -148,6 +148,10 @@
   // evive #532: a section gets space at the top/bottom instead of a width.
   function isSection(node) {
     var name = node.getAttribute('data-evive-block') || '';
+    // A block with an aspect ratio (a cover set to 16/9) can't get taller by padding: its height follows its width,
+    // so it keeps the width resize (-/+, corners), which does make it taller.
+    var ar = getComputedStyle(node).aspectRatio;
+    if (ar && ar !== 'auto') return false;
     if (name === 'core/cover' || name === 'core/columns') return true;
     if (node.classList.contains('alignfull') || node.classList.contains('alignwide')) return true;
     if ((pathOf(node) || '').indexOf('.') >= 0) return false;

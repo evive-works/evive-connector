@@ -12,7 +12,7 @@ Add your change under "## Unreleased" at the top; the release gate turns it into
   touched (a border set in the block, or the Card hairline, stays). A block with a minimum height (cover `minHeight`, `style.dimensions.minHeight`, the block type's global
   styles, or core's 430px for a cover without one) gets that much more, so a cover always grows. The block type's global
   styles are looked up by name (a missing entry no longer falls back to the root styles). Padding a theme sets only in
-  its stylesheet (evive-base's `is-style-carousel` columns) is not seen: there the extra space replaces it. In the overlay a section (cover, columns, wide/full-width block, or a
+  its stylesheet (evive-base's `is-style-carousel` columns) is not seen: there the extra space replaces it. A block with an aspect ratio (a cover set to 16/9) is not a section in the overlay: its height follows its width, so it keeps -/+ and the corners. In the overlay a section (cover, columns, wide/full-width block, or a
   top-level block with its own background) shows **Taller / Shorter** (space at the bottom; Shift = 5 steps; also the
   +/- keys) and drag handles on its top and bottom edge instead of -/+ and the corner handles; the frame gets
   `data-evive-space` (the block's own padding) so the live view uses the same rules. Toolbar text and the editor panel
