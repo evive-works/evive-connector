@@ -202,7 +202,11 @@
     return d.innerHTML.replace(/&nbsp;/g, ' ').replace(/[\s\u00a0]+/g, ' ').replace(/ ?<br> ?/g, '<br>').trim();
   }
 
-  function textChanged(st) { return !!(st.text && canon(st.text.after) !== canon(st.text.before)); }
+  function textChanged(st) {
+    if (!st.text) return false;
+    var after = editing && state[editing.path] === st ? cleanHtml(editing.el.innerHTML) : st.text.after; // live while typing
+    return canon(after) !== canon(st.text.before);
+  }
 
   function startEdit(node, x, y) {
     var st = state[pathOf(node)], el = textElement(node);
@@ -329,6 +333,7 @@
     if (editing.el.contains(e.target) && e.dataTransfer) insertPlain(e.dataTransfer.getData('text/plain'));
   }, true);
   document.addEventListener('dragover', function (e) { if (editing) e.preventDefault(); }, true);
+  document.addEventListener('input', function (e) { if (editing && editing.el.contains(e.target)) notify(); }, true); // live Save count
 
   function select(node) {
     if (editing && node !== editing.node) stopEdit(); // evive #533

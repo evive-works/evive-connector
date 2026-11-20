@@ -94,6 +94,7 @@
 
   save.addEventListener('click', function () {
     if (!api || !cfg.endpoint || busy) return;
+    if (api.stopEdit) api.stopEdit(); // evive #533: a text still being edited is part of this save
     var changes = api.changes();
     if (!changes.length) return;
     var body = { post_id: cfg.post_id, site: cfg.site, changes: changes };
