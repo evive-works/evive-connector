@@ -14,7 +14,7 @@ Add your change under "## Unreleased" at the top; the release gate turns it into
   +/- keys) and drag handles on its top and bottom edge instead of -/+ and the corner handles; the frame gets
   `data-evive-space` (the block's own padding) so the live view uses the same rules. Toolbar text and the editor panel
   describe it ("6 steps more space at the bottom"). Saving needs the evive MCP (#534) and app (#535) that keep the new
-  keys; until then evive drops them.
+  keys; until then evive drops them. The selection box now follows a change at once (not on the next frame).
 
 ## 1.4.1 — 2026-11-20
 
