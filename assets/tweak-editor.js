@@ -26,6 +26,8 @@
       if (v.hidden) parts.push('hidden');
       if (v.x || v.y) parts.push('moved ' + (v.x || 0) + ', ' + (v.y || 0));
       if (v.width) parts.push('width ' + v.width + '%');
+      if (v.top) parts.push(v.top + ' steps more space at the top'); // evive #532
+      if (v.bottom) parts.push(v.bottom + ' steps more space at the bottom');
       if (parts.length) out.push(SIZES[s] + ': ' + parts.join(', '));
     });
     return out;

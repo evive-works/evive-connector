@@ -15,3 +15,9 @@ html.evt-dragging, html.evt-dragging * { user-select: none !important; cursor: g
 #evt-box .evt-h-ne { right: -7px; top: -7px; cursor: nesw-resize; }
 #evt-box .evt-h-sw { left: -7px; bottom: -7px; cursor: nesw-resize; }
 #evt-box .evt-h-se { right: -7px; bottom: -7px; cursor: nwse-resize; }
+/* evive #532: a section has edge handles (space at the top / bottom) instead of the corners. */
+#evt-box .evt-h-n, #evt-box .evt-h-s { display: none; left: 50%; width: 36px; height: 10px; margin-left: -18px; border-radius: 5px; cursor: ns-resize; }
+#evt-box .evt-h-n { top: -6px; }
+#evt-box .evt-h-s { bottom: -6px; }
+#evt-box.evt-section .evt-h-n, #evt-box.evt-section .evt-h-s { display: block; }
+#evt-box.evt-section .evt-h-nw, #evt-box.evt-section .evt-h-ne, #evt-box.evt-section .evt-h-sw, #evt-box.evt-section .evt-h-se { display: none; }

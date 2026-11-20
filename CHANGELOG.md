@@ -2,6 +2,20 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
+## Unreleased
+
+- Tweak mode: make a section taller or shorter (evive #532). `eviveTweak.{desktop|tablet|phone}` learns `top` and
+  `bottom`: extra space at the top / bottom in steps of `--evive-tweak-step`, whole numbers 0..40 (0 = none). It is added
+  to the block's own padding (`padding-*: calc(own + n steps)`, own = the block's padding attribute); a cover block
+  without one uses core's 1em; any other block without one gets a transparent border of n steps (shows its background,
+  keeps the theme's padding). A block with its own minimum height (cover `minHeight`, `style.dimensions.minHeight`) gets
+  that much more, so a short cover still grows. In the overlay a section (cover, columns, wide/full-width block, or a
+  top-level block with its own background) shows **Taller / Shorter** (space at the bottom; Shift = 5 steps; also the
+  +/- keys) and drag handles on its top and bottom edge instead of -/+ and the corner handles; the frame gets
+  `data-evive-space` (the block's own padding) so the live view uses the same rules. Toolbar text and the editor panel
+  describe it ("6 steps more space at the bottom"). Saving needs the evive MCP (#534) and app (#535) that keep the new
+  keys; until then evive drops them.
+
 ## 1.4.1 — 2026-11-20
 
 - Draft preview links last 8 hours instead of 1 (filter `evive_preview_ttl`, seconds, default `8 * HOUR_IN_SECONDS`)

@@ -9,6 +9,8 @@ if (!defined('ABSPATH')) exit;
  *    x / y: move in steps of --evive-tweak-step (the theme's spacing preset 20), -40..40.
  *    width: % of the parent, 10..100 in steps of 5 (images keep their proportions).
  *    hidden: not shown on that screen size.
+ *    top / bottom (evive #532): extra space at the top / bottom of a section, in steps of --evive-tweak-step, 0..40.
+ *    It is added to the block's own padding (never instead of it), see space_base().
  *    Each screen size has its own range (phone <= 600px, tablet 601-1024px, desktop >= 1025px), so a tweak on one size
  *    never changes another. Rendered as scoped CSS on a class (evive-tw-<hash>); the saved block HTML is not changed,
  *    so the block editor never reports "unexpected content".
@@ -93,13 +95,87 @@ class Evive_Tweak {
                 $c['width'] = $w;
             }
             if (!empty($t['hidden'])) $c['hidden'] = true;
+            // evive #532: extra space at the top / bottom, 0..40 steps (0 = none, never negative).
+            foreach (['top', 'bottom'] as $k) {
+                if (isset($t[$k]) && is_numeric($t[$k])) {
+                    $v = max(0, min(40, (int) round($t[$k])));
+                    if ($v !== 0) $c[$k] = $v;
+                }
+            }
             if ($c) $out[$size] = $c;
         }
         return $out;
     }
 
-    /** The scoped CSS for one tweak on class $cls. $is_image: also scale the <img> inside. */
-    public static function css($cls, array $tweak, $is_image) {
+    /**
+     * evive #532: a block value from its attributes as CSS ("var:preset|spacing|60" -> var(--wp--preset--spacing--60)).
+     * Only plain lengths, var(), calc(), clamp(), min(), max(); anything else gives ''.
+     */
+    private static function css_value($v) {
+        if (is_int($v) || is_float($v)) $v = $v . 'px';
+        if (!is_string($v)) return '';
+        $v = trim($v);
+        if (strpos($v, 'var:') === 0) {
+            $parts = explode('|', substr($v, 4));
+            foreach ($parts as $part) if (!preg_match('/^[a-z0-9-]+$/i', $part)) return '';
+            return 'var(--wp--' . strtolower(implode('--', $parts)) . ')';
+        }
+        if ($v === '' || strlen($v) > 120 || !preg_match('/^[a-zA-Z0-9.%()\s,+*\/_-]+$/', $v)) return '';
+        if (preg_match('/[a-z]+\(/i', $v) && !preg_match('/^(?:(?:var|calc|clamp|min|max)\(|[^(]*$)/i', $v)) return '';
+        return $v;
+    }
+
+    /**
+     * evive #532: what the extra space of a section is added to, from the block's own attributes:
+     *   top / bottom: its own padding on that side as CSS ('' = none set in the block),
+     *   cover: a cover block (its media is clipped to the padding box),
+     *   minh: its own minimum height as CSS ('' = none).
+     */
+    public static function space_base(array $block) {
+        $a   = $block['attrs'] ?? [];
+        $pad = $a['style']['spacing']['padding'] ?? null;
+        $out = ['top' => '', 'bottom' => '', 'cover' => ($block['blockName'] ?? '') === 'core/cover', 'minh' => ''];
+        foreach (['top', 'bottom'] as $side) {
+            $out[$side] = self::css_value(is_array($pad) ? ($pad[$side] ?? null) : $pad);
+        }
+        if ($out['cover'] && isset($a['minHeight']) && is_numeric($a['minHeight'])) {
+            $unit = preg_match('/^(px|em|rem|vh|vw|%|svh|dvh|lvh)$/', (string) ($a['minHeightUnit'] ?? 'px')) ? ($a['minHeightUnit'] ?? 'px') : 'px';
+            $out['minh'] = ((float) $a['minHeight']) . $unit;
+        } elseif (!empty($a['style']['dimensions']['minHeight'])) {
+            $out['minh'] = self::css_value($a['style']['dimensions']['minHeight']);
+        }
+        return $out;
+    }
+
+    /**
+     * evive #532: CSS declarations for the extra space of one screen size. The same rules are built in tweak-frame.js.
+     * Own padding set in the block: padding = calc(own + n steps). Otherwise a cover block gets calc(1em + n steps)
+     * (core's default cover padding) and any other block a transparent border of n steps, which shows the block's
+     * background and leaves the padding of the theme alone. A block with its own minimum height gets that much more.
+     */
+    public static function space_rules(array $t, array $base) {
+        $rules = [];
+        $total = 0;
+        foreach (['top', 'bottom'] as $side) {
+            $n = (int) ($t[$side] ?? 0);
+            if ($n <= 0) continue;
+            $total += $n;
+            $own = $base[$side] ?? '';
+            if ($own === '' && !empty($base['cover'])) $own = '1em';
+            if ($own !== '') {
+                $rules[] = sprintf('padding-%s:calc(%s + %d * var(--evive-tweak-step)) !important', $side, $own, $n);
+            } else {
+                $rules[] = sprintf('border-%s:calc(%d * var(--evive-tweak-step)) solid transparent', $side, $n);
+            }
+        }
+        if ($total && !empty($base['minh'])) {
+            $rules[] = sprintf('min-height:calc(%s + %d * var(--evive-tweak-step)) !important', $base['minh'], $total);
+        }
+        return $rules;
+    }
+
+    /** The scoped CSS for one tweak on class $cls. $is_image: also scale the <img> inside. $base: see space_base(). */
+    public static function css($cls, array $tweak, $is_image, array $base = []) {
         $sel   = '.' . $cls . '.' . $cls; // two classes: wins over layout styles without !important
         $media = self::media();
         $css   = '';
@@ -119,6 +195,7 @@ class Evive_Tweak {
                     $rules[] = sprintf('max-width:%d%%', (int) $t['width']);
                     $rules[] = 'box-sizing:border-box';
                 }
+                $rules = array_merge($rules, self::space_rules($t, $base)); // evive #532
             }
             if (!$rules) continue;
             $css .= '@media ' . $media[$size] . '{' . $sel . '{' . implode(';', $rules) . '}';
@@ -144,10 +221,12 @@ class Evive_Tweak {
         $add_class = '';
         if ($tweak) {
             $json      = wp_json_encode($tweak);
-            $add_class = 'evive-tw-' . substr(md5($json), 0, 10);
+            $base      = self::has_space($tweak) ? self::space_base($block) : [];
+            // evive #532: the class also depends on the block's own padding when there is extra space.
+            $add_class = 'evive-tw-' . substr(md5($json . ($base ? wp_json_encode($base) : '')), 0, 10);
             $is_image  = in_array($block['blockName'] ?? '', ['core/image', 'core/post-featured-image', 'core/site-logo'], true);
             if (!isset(self::$printed[$add_class]) && !isset(self::$pending[$add_class])) {
-                self::$pending[$add_class] = self::css($add_class, $tweak, $is_image);
+                self::$pending[$add_class] = self::css($add_class, $tweak, $is_image, $base);
             }
             if (self::$frame) $set['data-evive-tweak'] = $json;
         }
@@ -155,8 +234,19 @@ class Evive_Tweak {
             $set['data-evive-path']  = (string) $path;
             $set['data-evive-block'] = (string) ($block['blockName'] ?? '');
             if (!$tweak) $set['data-evive-tweak'] = '{}';
+            // evive #532: the overlay builds the same space CSS (space_rules) from this.
+            $base = self::space_base($block);
+            if ($base['top'] !== '' || $base['bottom'] !== '' || $base['cover'] || $base['minh'] !== '') {
+                $set['data-evive-space'] = wp_json_encode($base);
+            }
         }
         return self::add_to_first_tag($content, $add_class, $set);
+    }
+
+    /** evive #532: true when a tweak has extra space on any screen size. */
+    private static function has_space(array $tweak) {
+        foreach ($tweak as $t) if (!empty($t['top']) || !empty($t['bottom'])) return true;
+        return false;
     }
 
     /** Add a class and attributes to the first HTML tag of a block's output. */
@@ -331,6 +421,8 @@ class Evive_Tweak {
     <button type="button" data-act="parent" title="Select the parent block (click the block again)">Parent</button>
     <button type="button" data-act="smaller" title="Smaller (5 %)">&minus;</button>
     <button type="button" data-act="bigger" title="Bigger (5 %)">+</button>
+    <button type="button" data-act="shorter" title="Less space at the bottom (Shift: 5 steps)" hidden>Shorter</button>
+    <button type="button" data-act="taller" title="More space at the bottom (Shift: 5 steps)" hidden>Taller</button>
     <button type="button" data-act="hidephone" aria-pressed="false" title="Hide this block on phones">Hide on phone</button>
     <button type="button" data-act="reset" title="Undo the tweaks of this block on this screen size">Reset</button>
   </div>

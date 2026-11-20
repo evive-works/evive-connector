@@ -43,6 +43,8 @@
     if (t.hidden) parts.push('hidden');
     if (t.x || t.y) parts.push('moved ' + (t.x || 0) + ', ' + (t.y || 0));
     if (t.width) parts.push(t.width + '%');
+    if (t.top) parts.push(t.top + (t.top === 1 ? ' step' : ' steps') + ' more space at the top'); // evive #532
+    if (t.bottom) parts.push(t.bottom + (t.bottom === 1 ? ' step' : ' steps') + ' more space at the bottom');
     return (i.block || 'block').replace(/^core\//, '') + ' (' + i.path + ') on ' + NAMES[i.device] + ': ' +
       (parts.length ? parts.join(', ') : 'not tweaked');
   }
@@ -53,6 +55,11 @@
       sel.textContent = describe(info);
       document.querySelectorAll('#evt-tools button').forEach(function (b) { b.disabled = !info; });
       if (info && !info.hasParent) document.querySelector('[data-act="parent"]').disabled = true;
+      // evive #532: a section gets Taller/Shorter instead of -/+.
+      var section = !!(info && info.section);
+      ['smaller', 'bigger'].forEach(function (a) { document.querySelector('[data-act="' + a + '"]').hidden = section; });
+      ['shorter', 'taller'].forEach(function (a) { document.querySelector('[data-act="' + a + '"]').hidden = !section; });
+      if (section) document.querySelector('[data-act="shorter"]').disabled = !((info.tweak || {}).bottom > 0);
       hidePhone.setAttribute('aria-pressed', info && info.phoneHidden ? 'true' : 'false');
       dirty = count;
       save.textContent = count ? 'Save (' + count + ')' : 'Save';
@@ -71,6 +78,8 @@
     if (a === 'parent') api.selectParent();
     if (a === 'smaller') api.resize(-5);
     if (a === 'bigger') api.resize(5);
+    if (a === 'taller') api.space(e.shiftKey ? 5 : 1); // evive #532
+    if (a === 'shorter') api.space(e.shiftKey ? -5 : -1);
     if (a === 'hidephone') api.togglePhoneHidden();
     if (a === 'reset') api.reset();
   });

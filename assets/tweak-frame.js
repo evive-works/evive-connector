@@ -1,7 +1,10 @@
 /* evive #522: tweak mode overlay, inside the preview frame. Click selects a block (data-evive-path), clicking the
  * selected block again selects its parent, Esc deselects. Drag or arrow keys (Shift = 5 steps) move it, the corner
  * handles or +/- resize it (% of the parent, steps of 5; images keep their proportions). Changes are shown live and
- * collected here; the toolbar around the frame (tweak-shell.js) sends them to evive. Nothing is written to WordPress. */
+ * collected here; the toolbar around the frame (tweak-shell.js) sends them to evive. Nothing is written to WordPress.
+ * evive #532: a section (cover, columns row, wide/full-width block, or a top-level block with its own background) gets
+ * Taller/Shorter and handles on its top and bottom edge instead of +/- and the corners: extra space (top/bottom, in
+ * steps, 0..40) on top of the block's own padding, per screen size. */
 (function () {
   'use strict';
   var cfg = window.eviveTweakFrame || {};
@@ -36,6 +39,10 @@
         c.width = Math.max(10, Math.min(100, Math.round(Number(v.width) / 5) * 5));
       }
       if (v.hidden) c.hidden = true;
+      ['top', 'bottom'].forEach(function (k) { // evive #532
+        var n = Math.max(0, Math.min(40, Math.round(Number(v[k]) || 0)));
+        if (n) c[k] = n;
+      });
       if (Object.keys(c).length) out[s] = c;
     });
     return out;
@@ -53,7 +60,9 @@
       var t = {};
       try { t = JSON.parse(n.getAttribute('data-evive-tweak') || '{}') || {}; } catch (e) { t = {}; }
       t = clean(t);
-      state[pathOf(n)] = { block: n.getAttribute('data-evive-block') || '', tweak: t, original: JSON.stringify(t) };
+      var base = {};
+      try { base = JSON.parse(n.getAttribute('data-evive-space') || '{}') || {}; } catch (e) { base = {}; }
+      state[pathOf(n)] = { block: n.getAttribute('data-evive-block') || '', tweak: t, original: JSON.stringify(t), base: base };
       // The live rules below replace the server's CSS for this block while tweaking.
       Array.prototype.slice.call(n.classList).forEach(function (c) { if (c.indexOf('evive-tw-') === 0) n.classList.remove(c); });
     });
@@ -74,6 +83,13 @@
       var h = document.createElement('div');
       h.className = 'evt-h evt-h-' + c;
       h.setAttribute('data-corner', c);
+      box.appendChild(h);
+    });
+    ['n', 's'].forEach(function (c) { // evive #532: space at the top / bottom of a section
+      var h = document.createElement('div');
+      h.className = 'evt-h evt-h-' + c;
+      h.setAttribute('data-edge', c === 'n' ? 'top' : 'bottom');
+      h.title = c === 'n' ? 'Drag: space at the top' : 'Drag: space at the bottom';
       box.appendChild(h);
     });
     document.body.appendChild(box);
@@ -115,6 +131,7 @@
       selected.classList.add('evt-selected');
     }
     box.hidden = !selected;
+    box.classList.toggle('evt-section', !!selected && isSection(selected)); // evive #532
     place();
     notify();
   }
@@ -126,6 +143,35 @@
     box.style.top = (r.top + window.scrollY) + 'px';
     box.style.width = r.width + 'px';
     box.style.height = r.height + 'px';
+  }
+
+  // evive #532: a section gets space at the top/bottom instead of a width.
+  function isSection(node) {
+    var name = node.getAttribute('data-evive-block') || '';
+    if (name === 'core/cover' || name === 'core/columns') return true;
+    if (node.classList.contains('alignfull') || node.classList.contains('alignwide')) return true;
+    if ((pathOf(node) || '').indexOf('.') >= 0) return false;
+    if (node.classList.contains('has-background')) return true;
+    var cs = getComputedStyle(node);
+    if (cs.backgroundImage && cs.backgroundImage !== 'none') return true;
+    var m = /rgba?\(([^)]+)\)/.exec(cs.backgroundColor || '');
+    return !!m && (m[1].split(',').length < 4 || parseFloat(m[1].split(',')[3]) > 0);
+  }
+
+  // evive #532: same rules as Evive_Tweak::space_rules() in PHP.
+  function spaceRules(t, base) {
+    var r = [], total = 0;
+    ['top', 'bottom'].forEach(function (side) {
+      var n = t[side] || 0;
+      if (n <= 0) return;
+      total += n;
+      var own = base[side] || '';
+      if (!own && base.cover) own = '1em';
+      if (own) r.push('padding-' + side + ':calc(' + own + ' + ' + n + ' * var(--evive-tweak-step, 0.5rem)) !important');
+      else r.push('border-' + side + ':calc(' + n + ' * var(--evive-tweak-step, 0.5rem)) solid transparent');
+    });
+    if (total && base.minh) r.push('min-height:calc(' + base.minh + ' + ' + total + ' * var(--evive-tweak-step, 0.5rem)) !important');
+    return r;
   }
 
   function cur() {
@@ -159,6 +205,7 @@
         r.push('translate:calc(' + (t.x || 0) + ' * var(--evive-tweak-step, 0.5rem)) calc(' + (t.y || 0) + ' * var(--evive-tweak-step, 0.5rem))');
       }
       if (t.width) r.push('width:' + t.width + '%', 'max-width:' + t.width + '%', 'box-sizing:border-box');
+      if (!t.hidden) r = r.concat(spaceRules(t, st.base || {})); // evive #532
       if (!r.length) return;
       out += '@media ' + MEDIA[s] + '{' + sel + '{' + r.join(';') + '}';
       if (t.width && IMAGE_BLOCKS[st.block]) out += sel + ' img{width:100% !important;height:auto !important}';
@@ -188,6 +235,7 @@
     return {
       path: p, block: st.block, device: device, tweak: st.tweak[device] || {},
       phoneHidden: !!(st.tweak.phone && st.tweak.phone.hidden),
+      section: isSection(selected), // evive #532
       hasParent: !!parentBlock(selected)
     };
   }
@@ -216,9 +264,10 @@
     if (!selected || e.button !== 0) return;
     e.preventDefault();
     var corner = e.target.getAttribute && e.target.getAttribute('data-corner');
+    var edge = e.target.getAttribute && e.target.getAttribute('data-edge'); // evive #532
     var t = cur() || {};
     var start = {
-      x: e.clientX, y: e.clientY, tx: t.x || 0, ty: t.y || 0, moved: false,
+      x: e.clientX, y: e.clientY, tx: t.x || 0, ty: t.y || 0, moved: false, top: t.top || 0, bottom: t.bottom || 0,
       w: selected.getBoundingClientRect().width, pw: parentWidth(selected)
     };
     box.setPointerCapture(e.pointerId);
@@ -227,7 +276,12 @@
       var dx = ev.clientX - start.x, dy = ev.clientY - start.y;
       if (!start.moved && Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
       start.moved = true;
-      if (corner) {
+      if (edge === 'bottom') {
+        update({ bottom: Math.max(0, Math.min(40, start.bottom + Math.round(dy / stepPx))) });
+      } else if (edge === 'top') {
+        // Dragging the top edge up makes more space at the top.
+        update({ top: Math.max(0, Math.min(40, start.top - Math.round(dy / stepPx))) });
+      } else if (corner) {
         var sign = corner.indexOf('w') >= 0 ? -1 : 1;
         var pct = (start.w + sign * dx) / start.pw * 100;
         update({ width: Math.max(10, Math.min(100, Math.round(pct / 5) * 5)) });
@@ -265,6 +319,13 @@
       if (!selected) return;
       update({ width: Math.max(10, Math.min(100, widthNow() + delta)) });
     },
+    // evive #532: more (n > 0) or less space at the bottom (or top) of a section, in steps.
+    space: function (n, side) {
+      var t = cur(); if (!t) return;
+      side = side === 'top' ? 'top' : 'bottom';
+      var p = {}; p[side] = Math.max(0, Math.min(40, (t[side] || 0) + n));
+      update(p);
+    },
     togglePhoneHidden: function () {
       if (!selected) return;
       var st = state[pathOf(selected)];
@@ -297,8 +358,8 @@
         case 'ArrowRight': if (!selected) return false; api.nudge(step, 0); return true;
         case 'ArrowUp': if (!selected) return false; api.nudge(0, -step); return true;
         case 'ArrowDown': if (!selected) return false; api.nudge(0, step); return true;
-        case '+': case '=': if (!selected) return false; api.resize(5); return true;
-        case '-': case '_': if (!selected) return false; api.resize(-5); return true;
+        case '+': case '=': if (!selected) return false; if (isSection(selected)) api.space(step); else api.resize(5); return true;
+        case '-': case '_': if (!selected) return false; if (isSection(selected)) api.space(-step); else api.resize(-5); return true;
       }
       return false;
     }
