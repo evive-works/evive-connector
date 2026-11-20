@@ -133,8 +133,8 @@ class Evive_Tweak {
      *     group with a background has no padding of its own). Padding a theme sets only in its own stylesheet is not
      *     seen (it becomes 0 + n steps).
      *   cover: a cover block (its media is clipped to the padding box),
-     *   cover: a cover block (its media is clipped to the padding box),
-     *   minh: its own minimum height as CSS ('' = none).
+     *   minh: its own minimum height as CSS ('' = none): the block's attribute, else the block type's global styles,
+     *     else core's 430px for a cover (not for a cover with an aspect ratio, which has no minimum height).
      */
     public static function space_base(array $block) {
         $a   = $block['attrs'] ?? [];
@@ -142,9 +142,12 @@ class Evive_Tweak {
         $out = ['top' => '', 'bottom' => '', 'cover' => ($block['blockName'] ?? '') === 'core/cover', 'minh' => ''];
         $name = (string) ($block['blockName'] ?? '');
         $global = [];
+        $bs = [];
         if ($name !== '' && function_exists('wp_get_global_styles')) {
-            $bs = wp_get_global_styles(['blocks', $name]);
-            $bs = is_array($bs) ? $bs : [];
+            // Read the whole blocks tree and look the block up ourselves: wp_get_global_styles() returns the whole
+            // style tree (root padding included) for a path that doesn't exist, e.g. core/cover under evive-base.
+            $all = wp_get_global_styles(['blocks']);
+            $bs  = (is_array($all) && isset($all[$name]) && is_array($all[$name])) ? $all[$name] : [];
             // The block's style variation (is-style-<name>) wins over the block type's own global styles.
             if (preg_match('/(?:^|\s)is-style-([a-z0-9_-]+)/i', (string) ($a['className'] ?? ''), $m)
                 && isset($bs['variations'][$m[1]]['spacing']['padding'])) {
@@ -164,6 +167,10 @@ class Evive_Tweak {
             $out['minh'] = ((float) $a['minHeight']) . $unit;
         } elseif (!empty($a['style']['dimensions']['minHeight'])) {
             $out['minh'] = self::css_value($a['style']['dimensions']['minHeight']);
+        } elseif (isset($bs['dimensions']['minHeight']) && self::css_value($bs['dimensions']['minHeight']) !== '') {
+            $out['minh'] = self::css_value($bs['dimensions']['minHeight']); // the block type's global styles
+        } elseif ($out['cover'] && empty($a['style']['dimensions']['aspectRatio'])) {
+            $out['minh'] = '430px'; // core's stylesheet default for a cover without a minimum height of its own
         }
         return $out;
     }
