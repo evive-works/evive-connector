@@ -3,7 +3,7 @@ Contributors: stackpros
 Tags: evive, elementor, ai, content
 Requires at least: 6.0
 Tested up to: 6.5
-Stable tag: 1.4.3
+Stable tag: 1.5.0
 Requires PHP: 8.0
 License: Proprietary
 

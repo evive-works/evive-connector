@@ -2,7 +2,7 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
-## Unreleased
+## 1.5.0 — 2026-11-21
 
 - Pending changes for published pages (evive #539, design #538). New `includes/class-pending.php`. Routes (evive/v1,
   edit rights on the live post): `POST /pending/{type}/{id}` makes one draft copy of a published block page, or returns
