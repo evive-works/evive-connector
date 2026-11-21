@@ -14,8 +14,9 @@ Add your change under "## Unreleased" at the top; the release gate turns it into
   the live post_content + post_modified_gmt). Publish: 409 `evive_pending_conflict` when the live page changed since the
   copy was made (unless `force`), a revision of the live state (`restore_revision_id` in the answer), then only the copy's
   post_content on the live post (title, slug, SEO, featured image stay), cache purged, copy to the trash, meta removed.
-  Discard: copy to the trash, meta removed, live untouched. A published page that is not a block page, or a post that is
-  itself a copy, is refused (400).
+  Discard: copy to the trash, meta removed, live untouched. A published page that is not a block page is refused (400).
+  A route called with the copy's own ID answers for its live post (rights checked on the live post). The 409 also gives
+  `modified_by` / `modified_at` (from `_edit_last`, else the latest revision's author).
 - wp-admin: the copy shows "evive: pending changes" in the page list, the live page "evive: changes not live yet". The
   copy's own Publish (block editor, classic editor, REST) keeps it a draft without a slug, with a notice to publish from
   evive. The block editor of the live page warns "This page has evive changes that are not live yet".
