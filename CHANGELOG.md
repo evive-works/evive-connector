@@ -2,7 +2,7 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
-## Unreleased
+## 1.4.3 — 2026-11-21
 
 - Tweak mode: edit text in place (evive #533). Double-click a heading, paragraph, list item, button or image caption
   (or select it and press F2 / Enter, or "Edit text") to edit its text right in the preview. Enter ends a heading,
