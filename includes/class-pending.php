@@ -58,6 +58,7 @@ class Evive_Pending {
     /** edit_post on the live post (the {id} of the route). A missing post is answered by the callback (404). */
     public function can_edit_live(WP_REST_Request $request) {
         $id = (int) $request->get_param('id');
+        if (self::live_of($id)) $id = self::live_of($id); // {id} is the copy: the rights of its live post count
         if (!get_post($id)) return current_user_can('edit_posts');
         if (current_user_can('edit_post', $id)) return true;
         return new WP_Error('evive_forbidden', 'evive needs edit rights on this page for its pending changes.', ['status' => rest_authorization_required_code()]);
@@ -90,10 +91,12 @@ class Evive_Pending {
         if (!$post || $post->post_type !== $request->get_param('post_type')) {
             return new WP_Error('not_found', 'Post not found', ['status' => 404]);
         }
-        if (self::live_of($post->ID)) {
-            return new WP_Error('evive_pending_is_copy',
-                'Post ' . $post->ID . ' is itself a pending copy (of post ' . self::live_of($post->ID) . '); use the live post ID.',
-                ['status' => 400, 'live_id' => self::live_of($post->ID)]);
+        // {id} may be the pending copy itself (the MCP, #540, gets it from a tweak or preview): answer for its live post.
+        $live_id = self::live_of($post->ID);
+        if ($live_id) {
+            $live = get_post($live_id);
+            if (!$live) return new WP_Error('not_found', 'The live post of this pending copy is gone.', ['status' => 404]);
+            return $live;
         }
         return $post;
     }
