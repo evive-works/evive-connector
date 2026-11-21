@@ -60,7 +60,7 @@ class Evive_Pending {
         $id = (int) $request->get_param('id');
         if (!get_post($id)) return current_user_can('edit_posts');
         if (current_user_can('edit_post', $id)) return true;
-        return new WP_Error('evive_forbidden', 'evive needs edit rights on this page for its pending changes.', ['status' => 403]);
+        return new WP_Error('evive_forbidden', 'evive needs edit rights on this page for its pending changes.', ['status' => rest_authorization_required_code()]);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
@@ -264,7 +264,7 @@ class Evive_Pending {
     /** All pending copies on this site that the user can edit. */
     public function list_all(WP_REST_Request $request) {
         $ids = get_posts([
-            'post_type'      => 'any',
+            'post_type'      => array_values(get_post_types()), // 'any' skips types excluded from search
             'post_status'    => 'draft',
             'meta_key'       => self::OF_META,
             'posts_per_page' => 200,
