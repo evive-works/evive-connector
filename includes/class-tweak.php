@@ -444,6 +444,11 @@ class Evive_Tweak {
             'expires'  => (int) get_post_meta($post_id, '_evive_tweak_token_expires', true),
             'widths'   => apply_filters('evive_tweak_widths', ['desktop' => 1280, 'tablet' => 820, 'phone' => 390]),
         ];
+        // evive #539: tweaking the pending copy of a live page: the bar shows the band and Publish / Discard changes.
+        $live_id = class_exists('Evive_Pending') ? Evive_Pending::live_of($post_id) : 0;
+        if ($live_id) {
+            $config['pending'] = ['live_id' => $live_id, 'live_url' => get_permalink($live_id)];
+        }
         $base = plugins_url('assets/', EVIVE_PATH . 'evive-connector.php');
         status_header(200);
         header('Content-Type: text/html; charset=utf-8');
@@ -459,6 +464,15 @@ class Evive_Tweak {
 <link rel="stylesheet" href="<?php echo esc_url($base . 'tweak-shell.css?ver=' . EVIVE_VERSION); ?>">
 </head>
 <body>
+<?php if ($live_id) : // evive #539 ?>
+<div id="evt-pending" role="note">
+  <span>Pending changes of a live page: visitors still see the live version</span>
+  <span class="evt-group">
+    <button type="button" id="evt-publish" class="evt-primary">Publish changes</button>
+    <button type="button" id="evt-discard">Discard changes</button>
+  </span>
+</div>
+<?php endif; ?>
 <div id="evt-bar" role="toolbar" aria-label="evive tweak">
   <div class="evt-group" id="evt-devices">
     <button type="button" data-device="desktop" aria-pressed="true">Desktop</button>
@@ -496,10 +510,14 @@ class Evive_Tweak {
         wp_enqueue_script(
             'evive-tweak-editor',
             plugins_url('assets/tweak-editor.js', EVIVE_PATH . 'evive-connector.php'),
-            ['wp-hooks', 'wp-compose', 'wp-element', 'wp-block-editor', 'wp-components'],
+            ['wp-hooks', 'wp-compose', 'wp-element', 'wp-block-editor', 'wp-components', 'wp-data', 'wp-notices'],
             EVIVE_VERSION,
             false
         );
+        // evive #539: a notice on a pending copy ("publish from evive") and on a live page that has one.
+        $post = get_post();
+        $pending = ($post && class_exists('Evive_Pending')) ? Evive_Pending::editor_data($post->ID) : null;
+        if ($pending) wp_localize_script('evive-tweak-editor', 'eviveTweakEditor', ['pending' => $pending]);
     }
 }
 

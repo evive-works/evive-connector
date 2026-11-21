@@ -68,10 +68,64 @@
       hidePhone.setAttribute('aria-pressed', info && info.phoneHidden ? 'true' : 'false');
       dirty = count;
       save.textContent = count ? 'Save (' + count + ')' : 'Save';
-      save.disabled = !count || busy || !cfg.endpoint;
+      save.disabled = !count || busy || !cfg.endpoint || done;
       if (count && !cfg.endpoint) say('No evive connection for this link: tweaks cannot be sent.', true);
+      pendingButtons();
     }
   };
+
+  // evive #539: the pending copy of a live page. Publish / Discard changes are disabled while a Save is pending
+  // (unsaved tweaks or a save running); they post {post_id, site, action} to the same tweak endpoint.
+  var publishBtn = document.getElementById('evt-publish');
+  var discardBtn = document.getElementById('evt-discard');
+  var done = false;
+  function pendingButtons() {
+    [publishBtn, discardBtn].forEach(function (b) {
+      if (!b) return;
+      b.disabled = done || busy || dirty > 0 || !cfg.endpoint;
+      b.title = dirty > 0 ? 'Save your tweaks first' : '';
+    });
+  }
+  function send(body) {
+    return fetch(cfg.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.token },
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        var j = null; try { j = JSON.parse(t); } catch (e) { /* not JSON */ }
+        if (!r.ok) throw new Error((j && (j.error || j.message)) || ('evive answered ' + r.status));
+        return j;
+      });
+    });
+  }
+  function pendingAction(action) {
+    if (!cfg.pending || !cfg.endpoint || busy || dirty || done) return;
+    var url = cfg.pending.live_url || 'the live page';
+    var q = action === 'publish'
+      ? 'This goes live on ' + url + ' for every visitor. Publish the changes?'
+      : 'Discard the pending changes? The live page ' + url + ' stays as it is.';
+    if (!window.confirm(q)) return;
+    busy = true; save.disabled = true; pendingButtons();
+    say(action === 'publish' ? 'Publishing…' : 'Discarding…');
+    send({ post_id: cfg.post_id, site: cfg.site, action: action }).then(function (j) {
+      busy = false; done = true;
+      save.disabled = true;
+      document.querySelectorAll('#evt-tools button').forEach(function (b) { b.disabled = true; });
+      say(action === 'publish' ? 'Published: the changes are live on ' + url + '.' : 'Discarded: the live page is unchanged.');
+      pendingButtons();
+      try {
+        if (window.parent !== window) window.parent.postMessage({ type: 'evive:pending-' + (action === 'publish' ? 'published' : 'discarded'), post_id: cfg.post_id, live_id: cfg.pending.live_id, result: j }, new URL(cfg.endpoint).origin);
+      } catch (e) { /* no evive window */ }
+    }).catch(function (err) {
+      busy = false;
+      save.disabled = !dirty;
+      pendingButtons();
+      say((action === 'publish' ? 'Not published: ' : 'Not discarded: ') + err.message, true);
+    });
+  }
+  if (publishBtn) publishBtn.addEventListener('click', function () { pendingAction('publish'); });
+  if (discardBtn) discardBtn.addEventListener('click', function () { pendingAction('discard'); });
 
   document.getElementById('evt-devices').addEventListener('click', function (e) {
     var d = e.target.getAttribute && e.target.getAttribute('data-device');
@@ -93,23 +147,13 @@
   document.addEventListener('keydown', function (e) { if (api && api.key(e)) e.preventDefault(); });
 
   save.addEventListener('click', function () {
-    if (!api || !cfg.endpoint || busy) return;
+    if (!api || !cfg.endpoint || busy || done) return;
     if (api.stopEdit) api.stopEdit(); // evive #533: a text still being edited is part of this save
     var changes = api.changes();
     if (!changes.length) return;
     var body = { post_id: cfg.post_id, site: cfg.site, changes: changes };
-    busy = true; save.disabled = true; say('Saving…');
-    fetch(cfg.endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.token },
-      body: JSON.stringify(body)
-    }).then(function (r) {
-      return r.text().then(function (t) {
-        var j = null; try { j = JSON.parse(t); } catch (e) { /* not JSON */ }
-        if (!r.ok) throw new Error((j && (j.error || j.message)) || ('evive answered ' + r.status));
-        return j;
-      });
-    }).then(function () {
+    busy = true; save.disabled = true; pendingButtons(); say('Saving…');
+    send(body).then(function () {
       busy = false;
       api.saved();
       say('Saved: evive applies it as a new revision.');
@@ -119,6 +163,7 @@
     }).catch(function (err) {
       busy = false;
       save.disabled = !dirty;
+      pendingButtons();
       say('Not saved: ' + err.message, true);
     });
   });
@@ -130,6 +175,7 @@
     save.title = 'This tweak link works until ' + t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
   document.querySelectorAll('#evt-tools button').forEach(function (b) { b.disabled = true; });
+  pendingButtons(); // evive #539
   say('Loading the page…');
   setDevice('desktop');
 })();

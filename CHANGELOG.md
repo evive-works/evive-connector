@@ -2,6 +2,29 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
+## Unreleased
+
+- Pending changes for published pages (evive #539, design #538). New `includes/class-pending.php`. Routes (evive/v1,
+  edit rights on the live post): `POST /pending/{type}/{id}` makes one draft copy of a published block page, or returns
+  the one there is (`created` true/false); `GET /pending/{type}/{id}` status (`pending`, `copy_id`, `live_changed`, who
+  and when last changed the live page); `POST .../publish` `{force?}`; `POST .../discard`; `GET /pending` (all pending
+  copies on this site). The copy is a normal draft (same content, title, parent, excerpt, template, featured image and
+  Polylang language; no slug, no translation link, no SEO or `_evive_*` meta), so tweak mode, previews and evive's draft
+  writes work on it unchanged. Meta: live `_evive_pending_id`; copy `_evive_pending_of`, `_evive_pending_base` (sha256 of
+  the live post_content + post_modified_gmt). Publish: 409 `evive_pending_conflict` when the live page changed since the
+  copy was made (unless `force`), a revision of the live state (`restore_revision_id` in the answer), then only the copy's
+  post_content on the live post (title, slug, SEO, featured image stay), cache purged, copy to the trash, meta removed.
+  Discard: copy to the trash, meta removed, live untouched. A published page that is not a block page, or a post that is
+  itself a copy, is refused (400).
+- wp-admin: the copy shows "evive: pending changes" in the page list, the live page "evive: changes not live yet". The
+  copy's own Publish (block editor, classic editor, REST) keeps it a draft without a slug, with a notice to publish from
+  evive. The block editor of the live page warns "This page has evive changes that are not live yet".
+- Tweak mode on a copy: a band "Pending changes of a live page: visitors still see the live version" with Publish
+  changes / Discard changes (disabled while tweaks are unsaved or a save runs; a confirm names the live URL). They post
+  `{post_id, site, action: "publish"|"discard"}` to the tweak endpoint with the same Bearer token (the evive app does
+  the work, #541) and tell the evive window (`evive:pending-published` / `evive:pending-discarded`). The draft preview
+  strip of a copy shows the same band.
+
 ## 1.4.3 — 2026-11-21
 
 - Tweak mode: edit text in place (evive #533). Double-click a heading, paragraph, list item, button or image caption

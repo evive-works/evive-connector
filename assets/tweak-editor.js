@@ -33,6 +33,18 @@
     return out;
   }
 
+  // evive #539: pending changes. On the pending copy: its Publish keeps it a draft, publish from evive. On a live page
+  // with a pending copy: its evive changes are not live yet.
+  var pending = window.eviveTweakEditor && window.eviveTweakEditor.pending;
+  if (pending && wp.data) {
+    var show = function () {
+      try {
+        wp.data.dispatch('core/notices').createNotice('warning', pending.message, { id: 'evive-pending', isDismissible: false });
+      } catch (e) { /* no notices store */ }
+    };
+    if (window.document.readyState === 'loading') window.document.addEventListener('DOMContentLoaded', show); else show();
+  }
+
   if (!be.InspectorControls || !c.PanelBody || !c.Button) return;
   var withPanel = wp.compose.createHigherOrderComponent(function (BlockEdit) {
     return function (props) {

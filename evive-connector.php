@@ -65,6 +65,7 @@ require_once EVIVE_PATH . 'includes/class-faq-schema.php';
 require_once EVIVE_PATH . 'includes/class-cf7-form.php';
 require_once EVIVE_PATH . 'includes/class-items.php';
 require_once EVIVE_PATH . 'includes/class-tweak.php'; // evive #522: tweak mode + eviveTweak attribute
+require_once EVIVE_PATH . 'includes/class-pending.php'; // evive #539: pending changes for published pages
 
 add_action('rest_api_init', function () {
     (new Evive_Content_Map())->register_routes();
@@ -82,6 +83,7 @@ add_action('rest_api_init', function () {
     (new Evive_Faq_Schema())->register_routes();
     (new Evive_Cf7_Form())->register_routes();
     (new Evive_Items())->register_routes();
+    (new Evive_Pending())->register_routes(); // evive #539
 });
 
 add_action('init', 'evive_register_meta');

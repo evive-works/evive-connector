@@ -155,10 +155,15 @@ class Evive_Preview_Token {
         add_action('wp_footer', function () use ($post_id, $expires) {
             if (Evive_Tweak::is_frame()) return; // tweak mode has its own toolbar (evive #522)
             $exp_local = date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $expires);
+            // evive #539: the pending copy of a live page says so.
+            $pending = Evive_Pending::live_of($post_id)
+                ? '<span id="evive-pending-band" style="color:#1a3a2a;background:#c8f535;border-radius:4px;padding:2px 8px">Pending changes of a live page: visitors still see the live version</span>'
+                : '';
             echo '<div style="position:fixed;bottom:0;left:0;right:0;z-index:99999;'
                . 'background:#1a3a2a;color:#c8f535;font-family:sans-serif;font-size:12px;'
-               . 'padding:6px 12px;display:flex;gap:12px;align-items:center">'
+               . 'padding:6px 12px;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center">'
                . '<strong>evive preview</strong>'
+               . $pending
                . '<span style="color:#fff;opacity:.7">Draft · expires ' . esc_html($exp_local) . '</span>'
                . '</div>';
         }, 999);

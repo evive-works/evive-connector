@@ -14,3 +14,10 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 #evt-stage { flex: 1; overflow: hidden; padding: 4px 0; }
 #evt-frame { display: block; border: 0; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.15); transform-origin: 0 0; }
 @media (max-width: 600px) { #evt-bar { gap: 6px 8px; padding: 6px 8px; } .evt-sel { flex-basis: 100%; order: 5; } }
+/* evive #539: the pending copy of a live page */
+#evt-pending { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: space-between; padding: 6px 12px; background: #c8f535; color: #1a3a2a; font-size: 13px; font-weight: 600; }
+#evt-pending button { font: inherit; font-size: 13px; padding: 5px 10px; min-height: 32px; border-radius: 6px; border: 1px solid #1a3a2a; background: #fff; color: #1a3a2a; cursor: pointer; }
+#evt-pending .evt-primary { background: #1a3a2a; color: #c8f535; }
+#evt-pending button:disabled { opacity: .45; cursor: default; }
+#evt-pending button:focus-visible { outline: 2px solid #1a3a2a; outline-offset: 2px; }
+@media (max-width: 600px) { #evt-pending { padding: 6px 8px; } }
