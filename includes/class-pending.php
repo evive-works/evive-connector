@@ -109,6 +109,12 @@ class Evive_Pending {
     /** Who last changed a post and when (for the conflict answer and the status). */
     private static function last_change(WP_Post $post) {
         $uid  = (int) get_post_meta($post->ID, '_edit_last', true);
+        if (!$uid && wp_revisions_enabled($post)) {
+            // REST and wp_update_post saves do not set _edit_last; the latest revision's author is who saved last.
+            $latest = wp_get_post_revisions($post->ID, ['posts_per_page' => 1, 'orderby' => 'date ID', 'order' => 'DESC']);
+            $latest = $latest ? reset($latest) : null;
+            if ($latest) $uid = (int) $latest->post_author;
+        }
         $user = $uid ? get_userdata($uid) : null;
         return [
             'modified_gmt' => self::modified_gmt($post),
