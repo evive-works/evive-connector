@@ -98,12 +98,20 @@ class Evive_Pending {
         return $post;
     }
 
+    /** A post's last change as RFC 3339 GMT. Drafts keep post_modified_gmt at 0000-00-00 until a later save in some
+     *  paths, so then the local post_modified is converted. */
+    private static function modified_gmt(WP_Post $post) {
+        $gmt = $post->post_modified_gmt;
+        if (!$gmt || strpos($gmt, '0000-00-00') === 0) $gmt = get_gmt_from_date($post->post_modified);
+        return mysql_to_rfc3339($gmt) ?: $gmt;
+    }
+
     /** Who last changed a post and when (for the conflict answer and the status). */
     private static function last_change(WP_Post $post) {
         $uid  = (int) get_post_meta($post->ID, '_edit_last', true);
         $user = $uid ? get_userdata($uid) : null;
         return [
-            'modified_gmt' => mysql_to_rfc3339($post->post_modified_gmt) ?: $post->post_modified_gmt,
+            'modified_gmt' => self::modified_gmt($post),
             'modified_by'  => $user ? $user->display_name : null,
             'modified_by_id' => $uid ?: null,
         ];
@@ -121,7 +129,7 @@ class Evive_Pending {
         ];
         if ($copy) {
             $base = (string) get_post_meta($copy->ID, self::BASE_META, true);
-            $out['copy_modified_gmt'] = mysql_to_rfc3339($copy->post_modified_gmt) ?: $copy->post_modified_gmt;
+            $out['copy_modified_gmt'] = self::modified_gmt($copy);
             $out['copy_edit_url']     = get_edit_post_link($copy->ID, 'raw');
             $out['live_changed']      = !hash_equals($base, self::base_of($live)); // publish would give 409
             $out['live_last_change']  = self::last_change($live);
@@ -207,7 +215,8 @@ class Evive_Pending {
             return new WP_Error('evive_pending_conflict',
                 'The live page was changed after the pending changes were started (' . ($who['modified_by'] ?: 'unknown user') . ', '
                 . $who['modified_gmt'] . '). Publish anyway (force: the live change is kept as a revision) or discard and start again.',
-                ['status' => 409, 'live_last_change' => $who, 'copy_id' => $copy->ID]);
+                ['status' => 409, 'live_last_change' => $who, 'modified_by' => $who['modified_by'], 'modified_at' => $who['modified_gmt'],
+                 'live_id' => $live->ID, 'copy_id' => $copy->ID]); // modified_by/_at: the names the MCP (#540) reads
         }
 
         // A revision of the live state as it is now, to go back to. wp_save_post_revision() saves nothing when the
