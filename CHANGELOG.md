@@ -2,7 +2,7 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
-## Unreleased
+## 1.5.1 — 2026-11-23
 
 - Tweak mode: edit the question of a FAQ (`core/details`) in place (evive #543). The details block gets
   `data-evive-text` = the saved inner HTML of its own `<summary>` (the one before its first inner block; none or more
