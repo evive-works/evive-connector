@@ -305,6 +305,11 @@
 
   function editKey(e) {
     if (e.key === 'Escape') { stopEdit(); return true; }
+    // evive #543: in a <summary> the browser takes Space as "open/close" and types nothing; type it ourselves.
+    if (e.key === ' ' && editing.el.tagName === 'SUMMARY' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      document.execCommand('insertText', false, ' ');
+      return true;
+    }
     if (e.key === 'Enter') {
       if (editing.oneLine && !e.shiftKey) { stopEdit(); return true; }
       document.execCommand('insertLineBreak');
