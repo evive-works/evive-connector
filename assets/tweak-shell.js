@@ -41,7 +41,7 @@
     if (!i) return 'Click a block to select it, double-click text to edit it';
     // evive #533: text editing
     if (i.editing) return (i.block || 'block').replace(/^core\//, '') + ': editing text (' +
-      (/^core\/(heading|button|list-item|image)$/.test(i.block) ? 'Enter' : 'Esc or click outside') + ' ends)';
+      (/^core\/(heading|button|list-item|image|details)$/.test(i.block) ? 'Enter' : 'Esc or click outside') + ' ends)';
     var t = i.tweak || {}, parts = [];
     if (i.textChanged) parts.push('text edited');
     if (t.hidden) parts.push('hidden');
@@ -65,6 +65,10 @@
       ['shorter', 'taller'].forEach(function (a) { document.querySelector('[data-act="' + a + '"]').hidden = !section; });
       if (section) document.querySelector('[data-act="shorter"]').disabled = !((info.tweak || {}).bottom > 0);
       if (info && (!info.hasText || info.editing)) document.querySelector('[data-act="edittext"]').disabled = true; // evive #533
+      var faq = document.querySelector('[data-act="toggleopen"]'); // evive #543
+      faq.hidden = !(info && info.details);
+      faq.textContent = info && info.open ? 'Close FAQ' : 'Open FAQ';
+      faq.setAttribute('aria-pressed', info && info.open ? 'true' : 'false');
       hidePhone.setAttribute('aria-pressed', info && info.phoneHidden ? 'true' : 'false');
       dirty = count;
       save.textContent = count ? 'Save (' + count + ')' : 'Save';
@@ -142,6 +146,7 @@
     if (a === 'hidephone') api.togglePhoneHidden();
     if (a === 'reset') api.reset();
     if (a === 'edittext' && api.editText) api.editText(); // evive #533
+    if (a === 'toggleopen' && api.toggleOpen) api.toggleOpen(); // evive #543
   });
   // Keys also work while the focus is on the toolbar.
   document.addEventListener('keydown', function (e) { if (api && api.key(e)) e.preventDefault(); });

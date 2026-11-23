@@ -9,7 +9,9 @@
  * data-evive-text = the saved inner HTML of their text element) to edit its text in place. Enter ends a one-line edit
  * (heading, button, list item, caption), in a paragraph Enter is a line break and Esc or a click outside ends it.
  * Only inline formatting is kept (bold, italic, links, mark, span); paste is plain text. A text change is sent as
- * {path, block, text: {before, after}} with before = the saved inner HTML as the page was opened. */
+ * {path, block, text: {before, after}} with before = the saved inner HTML as the page was opened.
+ * evive #543: a FAQ (core/details) edits its own <summary> (the question) like a heading. Clicks never open or close a
+ * FAQ in tweak mode (so the caret stays); the toolbar's Open FAQ / Close FAQ does, to reach the answer paragraphs. */
 (function () {
   'use strict';
   var cfg = window.eviveTweakFrame || {};
@@ -154,7 +156,7 @@
 
   var editing = null; // {node, el, path}
   var textBar = null;
-  var ONE_LINE = { 'core/heading': 1, 'core/button': 1, 'core/list-item': 1, 'core/image': 1 };
+  var ONE_LINE = { 'core/heading': 1, 'core/button': 1, 'core/list-item': 1, 'core/image': 1, 'core/details': 1 };
   var KEEP = { STRONG: [], B: [], EM: [], I: [], A: ['href', 'target', 'rel'], MARK: ['class', 'style'], SPAN: ['class', 'style'], BR: [], S: [], SUB: [], SUP: [] };
   var DROP = { SCRIPT: 1, STYLE: 1, IFRAME: 1, OBJECT: 1, EMBED: 1, TEMPLATE: 1, NOSCRIPT: 1, TEXTAREA: 1, SELECT: 1, SVG: 1, MATH: 1, TITLE: 1, IMG: 1, VIDEO: 1, AUDIO: 1, INPUT: 1, BUTTON: 0 };
 
@@ -163,6 +165,7 @@
     var b = node.getAttribute('data-evive-block');
     if (b === 'core/button') return node.matches('a,button') ? node : node.querySelector('a,button');
     if (b === 'core/image') return node.querySelector('figcaption');
+    if (b === 'core/details') return node.querySelector(':scope > summary'); // evive #543: the question
     if (node.querySelector('[data-evive-path]')) return null; // holds other blocks (a list item with a sub-list)
     return node;
   }
@@ -481,7 +484,8 @@
       phoneHidden: !!(st.tweak.phone && st.tweak.phone.hidden),
       section: isSection(selected), // evive #532
       hasParent: !!parentBlock(selected),
-      hasText: !!st.text, textChanged: textChanged(st), editing: !!editing // evive #533
+      hasText: !!st.text, textChanged: textChanged(st), editing: !!editing, // evive #533
+      details: selected.tagName === 'DETAILS', open: !!selected.open // evive #543
     };
   }
 
@@ -597,6 +601,13 @@
       render(); place(); notify(); // evive #532: the box follows at once
     },
     editText: function () { if (selected) startEdit(selected); }, // evive #533
+    // evive #543: open or close the selected FAQ (clicks on its question don't while tweaking).
+    toggleOpen: function () {
+      if (!selected || selected.tagName !== 'DETAILS') return;
+      if (editing) stopEdit();
+      selected.open = !selected.open;
+      place(); notify();
+    },
     stopEdit: function () { stopEdit(); },
     changes: changes,
     info: info,

@@ -292,10 +292,23 @@ class Evive_Tweak {
      */
     public static function text_source($block) {
         $name = $block['blockName'] ?? '';
+        if ($name === 'core/details') return self::details_summary_source($block); // evive #543
         if (!isset(self::TEXT_ELEMENTS[$name]) || !empty($block['innerBlocks'])) return null;
         $html = (string) ($block['innerHTML'] ?? '');
         if (!preg_match('#<(' . self::TEXT_ELEMENTS[$name] . ')\b[^>]*>(.*)</\1\s*>#is', $html, $m)) return null;
         return $m[2];
+    }
+
+    /**
+     * evive #543: a FAQ (core/details) holds its answer as inner blocks, so its text is the inner HTML of its own
+     * <summary>: the one in the block's HTML before its first inner block (innerContent[0]), as the evive MCP (#542)
+     * looks for it. Null when there is no such summary or more than one (the MCP refuses those too).
+     */
+    private static function details_summary_source($block) {
+        $own = $block['innerContent'][0] ?? ($block['innerHTML'] ?? '');
+        if (!is_string($own)) return null;
+        if (preg_match_all('#<summary\b[^>]*>(.*?)</summary\s*>#is', $own, $m) !== 1) return null;
+        return $m[1][0];
     }
 
     /** Add a class and attributes to the first HTML tag of a block's output. */
@@ -482,6 +495,7 @@ class Evive_Tweak {
   <div class="evt-group evt-sel" id="evt-sel">Click a block to select it</div>
   <div class="evt-group" id="evt-tools">
     <button type="button" data-act="edittext" title="Edit the text of this block (or double-click it)">Edit text</button>
+    <button type="button" data-act="toggleopen" title="Open or close this FAQ (clicks on its question don't, while tweaking)" hidden>Open FAQ</button>
     <button type="button" data-act="parent" title="Select the parent block (click the block again)">Parent</button>
     <button type="button" data-act="smaller" title="Smaller (5 %)">&minus;</button>
     <button type="button" data-act="bigger" title="Bigger (5 %)">+</button>

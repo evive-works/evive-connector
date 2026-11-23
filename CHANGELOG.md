@@ -2,6 +2,17 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
+## Unreleased
+
+- Tweak mode: edit the question of a FAQ (`core/details`) in place (evive #543). The details block gets
+  `data-evive-text` = the saved inner HTML of its own `<summary>` (the one before its first inner block; none or more
+  than one: not editable, as the evive MCP #542 refuses those). Double-click the question (or select the FAQ and press
+  F2 / Enter, or "Edit text") to edit it like a heading: one line, Enter ends. Save sends
+  `{path, block: "core/details", text: {before, after}}`; the evive MCP (#542) changes the `<summary>` and the block's
+  `summary` attribute. Clicks never open or close a FAQ in tweak mode (no toggle while editing, the caret stays); a
+  selected FAQ gets **Open FAQ / Close FAQ** in the toolbar, so its answer paragraphs can be selected and edited as
+  normal paragraphs. The page itself is unchanged: outside tweak mode the FAQ opens and closes as before.
+
 ## 1.5.0 — 2026-11-21
 
 - Pending changes for published pages (evive #539, design #538). New `includes/class-pending.php`. Routes (evive/v1,
