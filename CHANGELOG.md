@@ -10,8 +10,9 @@ Add your change under "## Unreleased" at the top; the release gate turns it into
   F2 / Enter, or "Edit text") to edit it like a heading: one line, Enter ends. Save sends
   `{path, block: "core/details", text: {before, after}}`; the evive MCP (#542) changes the `<summary>` and the block's
   `summary` attribute. Clicks never open or close a FAQ in tweak mode (no toggle while editing, the caret stays); a
-  selected FAQ gets **Open FAQ / Close FAQ** in the toolbar, so its answer paragraphs can be selected and edited as
-  normal paragraphs. The page itself is unchanged: outside tweak mode the FAQ opens and closes as before.
+  toolbar button **Open FAQ** (enabled for a selected FAQ, pressed while it is open) opens and closes it, so its
+  answer paragraphs can be selected and edited as normal paragraphs. Space types a space in the question (the browser
+  takes it as open/close in a summary). The page itself is unchanged: outside tweak mode the FAQ opens and closes as before.
 
 ## 1.5.0 — 2026-11-21
 

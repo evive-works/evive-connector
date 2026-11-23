@@ -495,7 +495,7 @@ class Evive_Tweak {
   <div class="evt-group evt-sel" id="evt-sel">Click a block to select it</div>
   <div class="evt-group" id="evt-tools">
     <button type="button" data-act="edittext" title="Edit the text of this block (or double-click it)">Edit text</button>
-    <button type="button" data-act="toggleopen" title="Open or close this FAQ (clicks on its question don't, while tweaking)" hidden>Open FAQ</button>
+    <button type="button" data-act="toggleopen" aria-pressed="false" title="Open or close the selected FAQ, to reach its answer (clicks on its question don't, while tweaking)">Open FAQ</button>
     <button type="button" data-act="parent" title="Select the parent block (click the block again)">Parent</button>
     <button type="button" data-act="smaller" title="Smaller (5 %)">&minus;</button>
     <button type="button" data-act="bigger" title="Bigger (5 %)">+</button>

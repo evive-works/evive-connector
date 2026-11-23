@@ -65,10 +65,11 @@
       ['shorter', 'taller'].forEach(function (a) { document.querySelector('[data-act="' + a + '"]').hidden = !section; });
       if (section) document.querySelector('[data-act="shorter"]').disabled = !((info.tweak || {}).bottom > 0);
       if (info && (!info.hasText || info.editing)) document.querySelector('[data-act="edittext"]').disabled = true; // evive #533
-      var faq = document.querySelector('[data-act="toggleopen"]'); // evive #543
-      faq.hidden = !(info && info.details);
-      faq.textContent = info && info.open ? 'Close FAQ' : 'Open FAQ';
-      faq.setAttribute('aria-pressed', info && info.open ? 'true' : 'false');
+      // evive #543: always there with the same label (pressed = open), so the toolbar never re-wraps between the two
+      // clicks of a double-click (on a phone the frame would move and the second click hit another block).
+      var faq = document.querySelector('[data-act="toggleopen"]');
+      faq.disabled = !(info && info.details);
+      faq.setAttribute('aria-pressed', info && info.details && info.open ? 'true' : 'false');
       hidePhone.setAttribute('aria-pressed', info && info.phoneHidden ? 'true' : 'false');
       dirty = count;
       save.textContent = count ? 'Save (' + count + ')' : 'Save';
