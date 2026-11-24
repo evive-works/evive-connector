@@ -122,6 +122,13 @@ class Evive_Page_Images {
             );
         }
 
+        // evive #558: the read-modify-write below runs under the per-post lock.
+        return evive_with_elementor_lock($page_id, function () use ($page_id, $element_id, $gallery_index, $new_attachment_id, $new_url) {
+            return $this->repoint_locked($page_id, $element_id, $gallery_index, $new_attachment_id, $new_url);
+        });
+    }
+
+    private function repoint_locked(int $page_id, string $element_id, int $gallery_index, int $new_attachment_id, string $new_url) {
         $post = get_post($page_id);
         if (!$post) {
             return new WP_Error('page_not_found', 'Page not found.', ['status' => 404]);

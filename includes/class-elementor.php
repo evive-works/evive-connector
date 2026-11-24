@@ -3,6 +3,12 @@ if (!defined('ABSPATH')) exit;
 
 class Evive_Elementor {
 
+    // evive #558: what evive should do with a verify_mismatch (also in the evive MCP tool description).
+    const MISMATCH_HINT = 'Not saved as asked. "saved" is what is on the page now for that settings key; "unchanged": true '
+        . 'means the old text is still there. Read the widget again (evive_get_item) and retry this one change on its own '
+        . '(not in parallel with other changes to the same page). If it fails again, tell the user which element '
+        . '(widget_id, widget_type, settings_key) still shows which text, and what to change by hand in Elementor.';
+
     public function register_routes() {
         register_rest_route('evive/v1', '/item/(?P<post_type>[a-zA-Z0-9_-]+)/(?P<id>\d+)', [
             'methods'             => 'GET',
@@ -228,6 +234,13 @@ class Evive_Elementor {
     }
 
     public function inject_text(WP_REST_Request $request) {
+        // evive #558: under the per-post lock, like every read-modify-write of _elementor_data.
+        return evive_with_elementor_lock((int) $request->get_param('page_id'), function () use ($request) {
+            return $this->do_inject_text($request);
+        });
+    }
+
+    private function do_inject_text(WP_REST_Request $request) {
         $page_id  = (int) $request->get_param('page_id');
         $text     = (string) ($request->get_param('text') ?? '');
         $position = (string) ($request->get_param('inject_position') ?? 'before_first_section');
@@ -299,6 +312,14 @@ class Evive_Elementor {
     }
 
     public function update_widget(WP_REST_Request $request) {
+        // evive #558: parallel update-widget calls for one page lost each other's writes (last write wins); the
+        // lock makes them run one after the other, each on the latest tree.
+        return evive_with_elementor_lock((int) $request->get_param('page_id'), function () use ($request) {
+            return $this->do_update_widget($request);
+        });
+    }
+
+    private function do_update_widget(WP_REST_Request $request) {
         $page_id   = (int) $request->get_param('page_id');
         $widget_id = (string) ($request->get_param('widget_id') ?? '');
         $content   = $request->get_param('content');
@@ -365,6 +386,7 @@ class Evive_Elementor {
                 return new WP_Error('widget_not_found', "Widget {$widget_id} not found", ['status' => 404]);
             }
         } else {
+            $previous_content = $this->read_widget_content($elements, $widget_id); // evive #558: for the mismatch report
             if (!$this->replace_widget_content($elements, $widget_id, $content, $widget_type)) {
                 return new WP_Error('widget_not_found', "Widget {$widget_id} not found", ['status' => 404]);
             }
@@ -398,13 +420,29 @@ class Evive_Elementor {
                 // is what let the original video-widget bug report success:true+verified:true
                 // for a write that actually corrupted the field.
                 if (!$this->values_match($actual, $expected)) {
-                    $mismatches[$field] = ['expected' => $expected, 'saved' => $actual];
+                    // evive #558: the settings key, the full saved value and whether the saved value is still the
+                    // old one (the write was lost or overwritten), so evive can tell the user what is on the page.
+                    $previous = $current_settings[$field] ?? null;
+                    $mismatches[$field] = [
+                        'settings_key' => (string) $field,
+                        'expected'     => $expected,
+                        'saved'        => $actual,
+                        'previous'     => $previous,
+                        'unchanged'    => $this->values_match($actual, $previous),
+                    ];
                 }
             }
             if (!empty($mismatches)) {
                 return new WP_Error('verify_mismatch',
                     'Write did not persist for one or more fields',
-                    ['status' => 500, 'mismatches' => $mismatches]
+                    [
+                        'status'      => 500,
+                        'page_id'     => $page_id,
+                        'widget_id'   => $widget_id,
+                        'widget_type' => $widget_type,
+                        'mismatches'  => $mismatches,
+                        'hint'        => self::MISMATCH_HINT,
+                    ]
                 );
             }
         } else {
@@ -415,10 +453,21 @@ class Evive_Elementor {
                     ['status' => 500]
                 );
             }
-            if ($saved_content !== $content) {
+            if (!$this->values_match($saved_content, $content)) {
                 return new WP_Error('verify_mismatch',
                     'Write did not persist: saved content does not match the requested update',
-                    ['status' => 500, 'requested' => $content, 'saved' => $saved_content]
+                    [
+                        'status'       => 500,
+                        'page_id'      => $page_id,
+                        'widget_id'    => $widget_id,
+                        'widget_type'  => $widget_type,
+                        'settings_key' => $this->content_key($widget_type),
+                        'requested'    => $content,
+                        'saved'        => $saved_content,
+                        'previous'     => $previous_content,
+                        'unchanged'    => $saved_content === $previous_content,
+                        'hint'         => self::MISMATCH_HINT,
+                    ]
                 );
             }
         }
@@ -589,7 +638,36 @@ class Evive_Elementor {
      * decode → encode round trip.
      */
     private function values_match($a, $b): bool {
-        return wp_json_encode($a) === wp_json_encode($b);
+        if (wp_json_encode($a) === wp_json_encode($b)) {
+            return true;
+        }
+        // evive #558: the same text in another encoding is a correct save: HTML entities (&rsquo; vs ’, &amp; vs &),
+        // Unicode composition (NFC), &nbsp; and runs of whitespace. Typographic and straight quotes are NOT folded
+        // together: ’ saved as ' would be a real, visible difference from what was asked.
+        return wp_json_encode(self::normalize_for_compare($a)) === wp_json_encode(self::normalize_for_compare($b));
+    }
+
+    private static function normalize_for_compare($v) {
+        if (is_array($v)) {
+            return array_map(fn($x) => self::normalize_for_compare($x), $v);
+        }
+        if (!is_string($v)) {
+            return $v;
+        }
+        $v = html_entity_decode($v, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        if (class_exists('Normalizer')) {
+            $n = Normalizer::normalize($v, Normalizer::FORM_C);
+            if ($n !== false) $v = $n;
+        }
+        $v = preg_replace('/[\s\x{00A0}]+/u', ' ', $v) ?? $v;
+        return trim($v);
+    }
+
+    /** evive #558: the settings key replace_widget_content() writes for a widget type (for the mismatch report). */
+    private function content_key(?string $wtype): string {
+        if (in_array($wtype, ['text-editor', 'text'], true)) return 'editor';
+        if ($wtype === 'button') return 'text';
+        return 'title';
     }
 
     /**

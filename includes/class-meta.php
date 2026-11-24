@@ -40,17 +40,22 @@ function evive_save_elementor_data(int $post_id, array $elements): bool {
         $post_id
     ));
 
+    // evive #558: report a failed query (false) instead of always returning true, so a write the database refused
+    // (e.g. text the column's charset can't hold) is a save_failed, not a later "verify_mismatch" with the old text.
     if ($meta_id) {
-        $wpdb->update(
+        $ok = $wpdb->update(
             $wpdb->postmeta,
             ['meta_value' => $json],
             ['meta_id'    => $meta_id]
         );
     } else {
-        $wpdb->insert(
+        $ok = $wpdb->insert(
             $wpdb->postmeta,
             ['post_id' => $post_id, 'meta_key' => '_elementor_data', 'meta_value' => $json]
         );
+    }
+    if ($ok === false) {
+        return false;
     }
 
     // Remove stale CSS cache entry so Elementor regenerates on next frontend load.
@@ -60,6 +65,71 @@ function evive_save_elementor_data(int $post_id, array $elements): bool {
     wp_cache_delete($post_id, 'post_meta');
 
     return true;
+}
+
+/**
+ * evive #558: run a read-modify-write of one post's _elementor_data under a per-post lock.
+ *
+ * Every Elementor write route reads the whole _elementor_data, changes one element and writes the whole tree back.
+ * Two such requests for the same page at the same time (evive sends several update-widget calls in one turn, in
+ * parallel) both read the old tree, and the last write wins: the other change is lost. Seen on PROD 23 Nov 2026
+ * (whyatwork.nl page 13446): some calls failed with verify_mismatch (their "saved" value was the old text, because
+ * another request's write came in between), others reported success but their change was overwritten afterwards.
+ *
+ * The lock is MySQL GET_LOCK (per connection, released by MySQL if PHP dies), named per database, table prefix
+ * and post, so Multisite sites don't share locks. Where GET_LOCK is not available (it returns NULL), a row in the
+ * options table is used instead (INSERT IGNORE on the unique option_name; stale after 60 s).
+ * Inside the lock the post's meta cache is dropped first, so $fn reads the latest tree, also with a persistent
+ * object cache. Busy for longer than $wait seconds: 409 evive_busy, nothing written, safe to retry.
+ *
+ * @param callable $fn Does the read, change, save and verify; its return value is returned.
+ * @return mixed|WP_Error
+ */
+function evive_with_elementor_lock(int $post_id, callable $fn, int $wait = 15) {
+    global $wpdb;
+    $name = 'evive_el_' . substr(md5(DB_NAME . '|' . $wpdb->postmeta), 0, 12) . '_' . $post_id;
+    $mode = null;
+
+    $got = $wpdb->get_var($wpdb->prepare('SELECT GET_LOCK(%s, %d)', $name, $wait));
+    if ($got === '1') {
+        $mode = 'mysql';
+    } elseif ($got === null) {
+        // No GET_LOCK on this database server: option row as the lock.
+        $deadline = microtime(true) + $wait;
+        do {
+            $wpdb->query($wpdb->prepare(
+                "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value < %d",
+                $name, time() - 60
+            ));
+            $ins = $wpdb->query($wpdb->prepare(
+                "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')",
+                $name, (string) time()
+            ));
+            if ($ins === 1) {
+                $mode = 'option';
+                break;
+            }
+            usleep(200000);
+        } while (microtime(true) < $deadline);
+    }
+
+    if ($mode === null) {
+        return new WP_Error('evive_busy',
+            'Another evive change to this page is still being saved. Nothing was written; try again in a moment.',
+            ['status' => 409, 'page_id' => $post_id]
+        );
+    }
+
+    try {
+        wp_cache_delete($post_id, 'post_meta');
+        return $fn();
+    } finally {
+        if ($mode === 'mysql') {
+            $wpdb->query($wpdb->prepare('SELECT RELEASE_LOCK(%s)', $name));
+        } else {
+            $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name = %s", $name));
+        }
+    }
 }
 
 /**

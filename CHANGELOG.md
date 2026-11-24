@@ -2,6 +2,24 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
+## Unreleased
+
+- Elementor writes no longer lose each other's changes (evive #558). On 23 Nov 2026 (PROD, whyatwork.nl page 13446)
+  evive sent several `update-widget` calls for one page in parallel: each read the whole `_elementor_data`, changed
+  one widget and wrote the whole tree back, so the last write won. Some calls then failed with `verify_mismatch`
+  (the "saved" value was the old text), others reported success but were overwritten. Typographic quotes were not the
+  cause: they are stored byte for byte. Now `update-widget`, `inject-text`, `duplicate-element`, `delete-element`,
+  `move-element` and `repoint-slideshow-image` run under a per-page lock (MySQL `GET_LOCK`, per database, table prefix
+  and post; an option row where `GET_LOCK` is missing) and read the latest tree inside it. Parallel calls now run one
+  after the other; a call that waits more than 15 s gets 409 `evive_busy` (nothing written, safe to retry).
+- `verify_mismatch` now names the element and says what is on the page: `page_id`, `widget_id`, `widget_type`, and per
+  field `settings_key`, the full `saved` value, `previous` (the value before this call) and `unchanged` (true: the old
+  text is still there), plus a `hint` for evive (retry this one change alone; if it fails again, tell the user which
+  element still shows which text and what to change by hand in Elementor). The `content` form gives the same.
+- The verify compares text that only differs in encoding as equal (HTML entities such as `&rsquo;`/`&amp;`, Unicode
+  NFC, `&nbsp;` and runs of whitespace). Typographic and straight quotes are still different.
+- A database write of `_elementor_data` that the database refuses is now `save_failed` instead of a later mismatch.
+
 ## 1.5.1 — 2026-11-23
 
 - Tweak mode: edit the question of a FAQ (`core/details`) in place (evive #543). The details block gets

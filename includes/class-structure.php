@@ -36,6 +36,13 @@ class Evive_Structure {
     }
 
     public function duplicate_element(WP_REST_Request $request) {
+        // evive #558: under the per-post lock, like every read-modify-write of _elementor_data.
+        return evive_with_elementor_lock((int) $request->get_param('page_id'), function () use ($request) {
+            return $this->do_duplicate_element($request);
+        });
+    }
+
+    private function do_duplicate_element(WP_REST_Request $request) {
         [$page_id, $widget_id, $elements, $err] = $this->load_request($request);
         if ($err) return $err;
 
@@ -58,6 +65,13 @@ class Evive_Structure {
     }
 
     public function delete_element(WP_REST_Request $request) {
+        // evive #558: under the per-post lock, like every read-modify-write of _elementor_data.
+        return evive_with_elementor_lock((int) $request->get_param('page_id'), function () use ($request) {
+            return $this->do_delete_element($request);
+        });
+    }
+
+    private function do_delete_element(WP_REST_Request $request) {
         [$page_id, $widget_id, $elements, $err] = $this->load_request($request);
         if ($err) return $err;
 
@@ -76,6 +90,13 @@ class Evive_Structure {
     }
 
     public function move_element(WP_REST_Request $request) {
+        // evive #558: under the per-post lock, like every read-modify-write of _elementor_data.
+        return evive_with_elementor_lock((int) $request->get_param('page_id'), function () use ($request) {
+            return $this->do_move_element($request);
+        });
+    }
+
+    private function do_move_element(WP_REST_Request $request) {
         [$page_id, $widget_id, $elements, $err] = $this->load_request($request);
         if ($err) return $err;
 
