@@ -314,7 +314,6 @@ class Evive_Elementor {
     public function update_widget(WP_REST_Request $request) {
         // evive #558: parallel update-widget calls for one page lost each other's writes (last write wins); the
         // lock makes them run one after the other, each on the latest tree.
-        if ($request->get_param('evive_test_race')) return $this->do_update_widget($request); // TEMP evive #558
         return evive_with_elementor_lock((int) $request->get_param('page_id'), function () use ($request) {
             return $this->do_update_widget($request);
         });
@@ -383,9 +382,7 @@ class Evive_Elementor {
                 );
             }
 
-            $to_write = $normalized_fields; // TEMP evive #558: test switch, write entity-encoded text
-            if ($request->get_param('evive_test_encode')) { foreach ($to_write as $k => $v) { if (is_string($v)) $to_write[$k] = htmlentities($v, ENT_QUOTES | ENT_HTML5, 'UTF-8'); } }
-            if (!$this->replace_widget_fields($elements, $widget_id, $to_write, $widget_type)) {
+            if (!$this->replace_widget_fields($elements, $widget_id, $normalized_fields, $widget_type)) {
                 return new WP_Error('widget_not_found', "Widget {$widget_id} not found", ['status' => 404]);
             }
         } else {
@@ -399,7 +396,6 @@ class Evive_Elementor {
             return new WP_Error('save_failed', 'Failed to encode Elementor data', ['status' => 500]);
         }
 
-        if ($request->get_param('evive_test_race')) usleep(1500000); // TEMP evive #558
         global $wpdb;
         $saved_raw      = $wpdb->get_var($wpdb->prepare(
             "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = '_elementor_data' LIMIT 1",
