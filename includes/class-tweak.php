@@ -573,7 +573,7 @@ class Evive_Tweak {
             self::$frame   = true;
             self::$post_id = $post_id;
             show_admin_bar(false);
-            add_action('wp_enqueue_scripts', function () {
+            add_action('wp_enqueue_scripts', function () use ($post_id, $tweak) {
                 wp_enqueue_style('evive-tweak-frame', plugins_url('assets/tweak-frame.css', EVIVE_PATH . 'evive-connector.php'), [], EVIVE_VERSION);
                 wp_enqueue_script('evive-tweak-frame', plugins_url('assets/tweak-frame.js', EVIVE_PATH . 'evive-connector.php'), [], EVIVE_VERSION, true);
                 wp_localize_script('evive-tweak-frame', 'eviveTweakFrame', ['media' => self::media(),
