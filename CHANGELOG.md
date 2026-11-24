@@ -23,6 +23,9 @@ Add your change under "## Unreleased" at the top; the release gate turns it into
   translation link). Not copied: slug, edit lock, old slugs, `_evive_*` meta (pending links, preview tokens), Elementor
   caches and Theme Builder conditions. Answers `id`, `title`, `builder`, `edit_url` and a `preview_url` (as
   `POST /preview-token` gives).
+- Elementor tools (evive #552): `evive_purge_post_cache()` also deletes Elementor's element cache
+  (`_elementor_element_cache`). Without it a widget text changed with `evive_update_widget` kept showing the old text
+  (the new colour did show) on sites where Elementor's element caching is on.
 
 ## 1.5.2 — 2026-11-24
 
