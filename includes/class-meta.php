@@ -170,6 +170,9 @@ function evive_with_elementor_lock(int $post_id, callable $fn, int $wait = 15) {
 function evive_purge_post_cache(int $post_id): void {
     delete_post_meta($post_id, '_elementor_css');
     delete_post_meta($post_id, '_elementor_page_assets');
+    // evive #552: Elementor's element cache (rendered widget HTML, Document::CACHE_META_KEY). Left in place, a widget
+    // text changed through evive_update_widget kept showing the old text while its new colour showed (CSS rebuilt).
+    delete_post_meta($post_id, '_elementor_element_cache');
     clean_post_cache($post_id);
     do_action('litespeed_purge_post', $post_id);
     do_action('w3tc_flush_post',      $post_id);
