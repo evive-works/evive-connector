@@ -2,7 +2,7 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
-## Unreleased
+## 1.5.3 — 2026-11-24
 
 - Pending changes for Elementor pages (evive #552). `POST /pending/{type}/{id}` on a published page with
   `_elementor_edit_mode = builder` now makes the draft copy too (before: 400 `evive_pending_no_blocks`), with the page's
