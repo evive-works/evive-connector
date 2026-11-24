@@ -223,8 +223,22 @@ class Evive_Pending {
         return rest_ensure_response(self::describe($live, get_post($copy_id)) + ['created' => true]);
     }
 
-    /** Publish (D5): only the copy's post_content goes live. D2: 409 when the live post changed, unless force. */
+    /** Publish (D5): only the copy's post_content goes live. D2: 409 when the live post changed, unless force.
+     *  evive #552: an Elementor page publishes under the per-page Elementor lock (#558), so an update-widget on the
+     *  live page can't read the old tree before and write it back after; the live post is read again inside it. */
     public function publish(WP_REST_Request $request) {
+        $live = $this->live_post($request);
+        if (is_wp_error($live)) return $live;
+        if (function_exists('evive_with_elementor_lock') && evive_is_elementor_post($live->ID)) {
+            return evive_with_elementor_lock($live->ID, function () use ($request, $live) {
+                clean_post_cache($live->ID);
+                return $this->publish_now($request);
+            });
+        }
+        return $this->publish_now($request);
+    }
+
+    private function publish_now(WP_REST_Request $request) {
         $live = $this->live_post($request);
         if (is_wp_error($live)) return $live;
         $copy = self::copy_of($live->ID);

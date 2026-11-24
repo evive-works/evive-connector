@@ -16,7 +16,9 @@ Add your change under "## Unreleased" at the top; the release gate turns it into
   post_content on the live post (same ID, URL, slug, SEO, Polylang links; an Elementor key the copy no longer has is
   removed), Elementor's CSS file and caches of the live post cleared, cache purged, the copy to the trash. Discard,
   preview links and the pending band work as for a block page. Status and publish answers say `builder`
-  (`elementor` / `blocks`).
+  (`elementor` / `blocks`). Publishing an Elementor page runs under the per-page Elementor lock of #558, so an
+  `update-widget` on the live page at the same moment waits instead of writing the old tree back (busy > 15 s: 409
+  `evive_busy`, nothing published).
 - Duplicate a page (evive #552): `POST /evive/v1/duplicate/{id}` `{title?}` (edit rights on the page) makes a draft
   "Title – kopie" (" – copy" when the page's language is not Dutch) with the same content, excerpt, parent, order, all
   meta (Elementor data and settings, template, featured image, custom fields, SEO), terms and Polylang language (no
