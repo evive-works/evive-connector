@@ -103,8 +103,8 @@
   function pendingButtons() {
     [publishBtn, discardBtn].forEach(function (b) {
       if (!b) return;
-      b.disabled = done || busy || dirty > 0 || !cfg.endpoint;
-      b.title = dirty > 0 ? 'Save your tweaks first' : '';
+      b.disabled = done || busy || dirty > 0 || !cfg.endpoint || !!previewing; // evive #549: not during a layout preview
+      b.title = dirty > 0 ? 'Save your tweaks first' : previewing ? 'Use the new layout or Cancel it first' : '';
     });
   }
   function send(body) {
@@ -121,7 +121,7 @@
     });
   }
   function pendingAction(action) {
-    if (!cfg.pending || !cfg.endpoint || busy || dirty || done) return;
+    if (!cfg.pending || !cfg.endpoint || busy || dirty || done || previewing) return;
     var url = cfg.pending.live_url || 'the live page';
     var q = action === 'publish'
       ? 'This goes live on ' + url + ' for every visitor. Publish the changes?'
