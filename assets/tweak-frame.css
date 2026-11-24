@@ -37,3 +37,5 @@ html.evt-on .evt-editing * { user-select: text !important; -webkit-user-select: 
 #evt-textbar button[data-cmd="bold"] { font-weight: 700; }
 #evt-textbar button[data-cmd="italic"] { font-style: italic; }
 #evt-textbar button[data-cmd="done"] { background: #c8f535; color: #1a3a2a; }
+/* evive #549: an image file dragged over an image block. */
+html.evt-on .evt-drop { outline: 3px dashed #2d7ff9 !important; outline-offset: -3px; }

@@ -21,3 +21,49 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 #evt-pending button:disabled { opacity: .45; cursor: default; }
 #evt-pending button:focus-visible { outline: 2px solid #1a3a2a; outline-offset: 2px; }
 @media (max-width: 600px) { #evt-pending { padding: 6px 8px; } }
+/* evive #549: the Change layout / Replace image panel, on the right of the frame (a phone: the bottom part). */
+#evt-stage { position: relative; }
+#evt-panel { position: absolute; z-index: 5; top: 4px; right: 8px; bottom: 4px; width: 340px; box-sizing: border-box; display: flex; flex-direction: column; background: #fff; color: #1a1a18; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,.25); overflow: hidden; }
+#evt-panel[hidden] { display: none; }
+#evt-panel .evt-ph { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: #1a3a2a; color: #fff; }
+#evt-panel h2 { margin: 0; font-size: 14px; font-weight: 600; }
+#evt-panel button { font: inherit; font-size: 13px; padding: 5px 10px; min-height: 32px; border-radius: 6px; border: 1px solid #b9c2bc; background: #fff; color: #1a3a2a; cursor: pointer; }
+#evt-panel button:disabled { opacity: .55; cursor: default; }
+#evt-panel button:focus-visible, #evt-panel input:focus-visible, #evt-panel .evt-zone:focus-visible { outline: 2px solid #2d7ff9; outline-offset: 2px; }
+#evt-panel .evt-x { border: 0; background: transparent; color: #fff; font-size: 20px; line-height: 1; min-width: 32px; }
+#evt-panel .evt-primary { background: #1a3a2a; color: #c8f535; border-color: #1a3a2a; font-weight: 600; }
+#evt-panel .evt-pb { flex: 1; overflow: auto; padding: 10px 12px; }
+#evt-panel .evt-pf { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 12px; border-top: 1px solid #e3e1da; font-size: 13px; }
+#evt-panel .evt-pf:empty { display: none; }
+#evt-panel .evt-pmsg { margin: 0; padding: 0 12px 8px; font-size: 12px; color: #3d4a42; }
+#evt-panel .evt-pmsg:empty { display: none; }
+#evt-panel .evt-err { color: #a3281a; }
+#evt-panel .evt-muted { color: #5b635e; font-size: 12px; margin: 0 0 8px; }
+.evt-lays { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+#evt-panel .evt-lay { display: flex; flex-direction: column; gap: 4px; padding: 6px; text-align: left; min-height: 0; }
+#evt-panel .evt-lay img { display: block; width: 100%; height: auto; border-radius: 4px; background: #f3f2ee; }
+#evt-panel .evt-lay span { font-size: 12px; line-height: 1.3; }
+#evt-panel .evt-lay[aria-pressed="true"] { border: 2px solid #2d7ff9; padding: 5px; }
+#evt-panel .evt-lay[aria-current="true"] { opacity: 1; border-style: dashed; }
+#evt-panel .evt-wait { opacity: .6; pointer-events: none; }
+.evt-not { margin-top: 10px; font-size: 12px; color: #5b635e; }
+.evt-not ul { margin: 6px 0 0; padding-left: 18px; }
+.evt-spin { width: 16px; height: 16px; border: 2px solid #c9d3cc; border-top-color: #1a3a2a; border-radius: 50%; animation: evt-spin .8s linear infinite; flex: none; }
+@keyframes evt-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .evt-spin { animation-duration: 2.4s; } }
+.evt-zone { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 10px; border: 2px dashed #b9c2bc; border-radius: 8px; text-align: center; font-size: 12px; color: #3d4a42; }
+.evt-zone.evt-over { border-color: #2d7ff9; background: #eef4ff; }
+.evt-field { display: block; margin: 10px 0; font-size: 12px; color: #3d4a42; }
+.evt-field input, .evt-lib input { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 6px 8px; min-height: 32px; font: inherit; font-size: 13px; border: 1px solid #b9c2bc; border-radius: 6px; }
+.evt-lib .evt-row { display: flex; gap: 6px; align-items: flex-end; }
+.evt-lib .evt-row input { margin: 0; }
+.evt-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+#evt-panel .evt-thumb { padding: 0; aspect-ratio: 1; overflow: hidden; background: #f3f2ee; }
+#evt-panel .evt-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#evt-panel .evt-thumb[aria-pressed="true"] { outline: 3px solid #2d7ff9; outline-offset: -3px; }
+#evt-panel .evt-more { margin-top: 8px; width: 100%; }
+@media (max-width: 760px) {
+  #evt-panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 58%; border-radius: 10px 10px 0 0; }
+  .evt-lays { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .evt-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

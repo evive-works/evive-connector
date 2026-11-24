@@ -45,6 +45,7 @@ class Evive_Tweak {
         add_action('wp_head', [__CLASS__, 'print_css'], 99);
         add_action('wp_footer', [__CLASS__, 'print_css'], 99);
         add_action('enqueue_block_editor_assets', [__CLASS__, 'editor_assets']);
+        add_action('rest_api_init', [__CLASS__, 'rest_routes']); // evive #549
     }
 
     // ── Breakpoints ─────────────────────────────────────────────────────────
@@ -343,8 +344,8 @@ class Evive_Tweak {
         return serialize_blocks($blocks);
     }
 
-    private static function walk(array &$blocks, $prefix) {
-        $i = 0;
+    private static function walk(array &$blocks, $prefix, $first = 0) {
+        $i = $first; // evive #549: a section rendered on its own starts at its own index
         foreach ($blocks as &$b) {
             if (empty($b['blockName'])) continue; // whitespace / freeform between blocks has no path
             $path = $prefix === '' ? (string) $i : $prefix . '.' . $i;
@@ -410,6 +411,147 @@ class Evive_Tweak {
         return self::$frame;
     }
 
+    // ── Layout preview and media library (evive #549) ───────────────────────
+
+    /**
+     * evive #549: two routes for the tweak frame, with the tweak token of the page (header X-Evive-Tweak) instead of a
+     * WordPress login. Neither writes anything.
+     *   POST /evive/v1/tweak/render {post_id, path, markup}: the block markup of one section (a new layout from evive) as
+     *     the site renders it, with the tweak frame's data attributes (paths from `path`), plus the block styles it needs.
+     *   GET  /evive/v1/tweak/media?post_id=&search=&page=: the images of the media library (for Replace image).
+     */
+    public static function rest_routes() {
+        $auth = [__CLASS__, 'rest_token_ok'];
+        register_rest_route('evive/v1', '/tweak/render', [
+            'methods' => 'POST', 'callback' => [__CLASS__, 'rest_render'], 'permission_callback' => $auth,
+        ]);
+        register_rest_route('evive/v1', '/tweak/media', [
+            'methods' => 'GET', 'callback' => [__CLASS__, 'rest_media'], 'permission_callback' => $auth,
+        ]);
+    }
+
+    /** evive #549: the tweak token of post_id, from the X-Evive-Tweak header. */
+    public static function rest_token_ok(WP_REST_Request $req) {
+        $post_id = (int) $req->get_param('post_id');
+        $token   = (string) $req->get_header('x_evive_tweak');
+        if (!$post_id || !get_post($post_id) || !self::token_valid($post_id, $token)) {
+            return new WP_Error('evive_tweak_token', 'This tweak link is not valid any more. Open tweak mode again from evive.', ['status' => 401]);
+        }
+        return true;
+    }
+
+    /** evive #549: render one section's block markup (nothing is saved). */
+    public static function rest_render(WP_REST_Request $req) {
+        $post_id = (int) $req->get_param('post_id');
+        $path    = (string) $req->get_param('path');
+        $markup  = (string) $req->get_param('markup');
+        if (!preg_match('/^\d{1,4}$/', $path)) return new WP_Error('evive_tweak_path', 'path must be the number of a top-level section', ['status' => 400]);
+        if ($markup === '' || strlen($markup) > 300000) return new WP_Error('evive_tweak_markup', 'markup must be 1 to 300000 bytes of block markup', ['status' => 400]);
+        $blocks = parse_blocks($markup);
+        $real   = array_values(array_filter($blocks, function ($b) { return !empty($b['blockName']); }));
+        if (count($real) !== 1) return new WP_Error('evive_tweak_markup', 'markup must hold exactly one top-level block', ['status' => 400]);
+        // The same as the evive MCP refuses at Save (#547): no raw HTML, no scripts.
+        $unsafe = false;
+        $check  = function ($list) use (&$check, &$unsafe) {
+            foreach ($list as $b) {
+                if (in_array($b['blockName'] ?? '', ['core/html', 'core/freeform', 'core/shortcode', 'core/legacy-widget'], true)) $unsafe = true;
+                if (!empty($b['innerBlocks'])) $check($b['innerBlocks']);
+            }
+        };
+        $check($real);
+        if ($unsafe || preg_match('/<\s*(script|iframe|object|embed|style|form)\b|<[a-z][^>]*\son[a-z]+\s*=|\b(?:href|src)\s*=\s*["\']?\s*javascript:/i', $markup)) {
+            return new WP_Error('evive_tweak_markup', 'This markup holds HTML that tweak mode does not show (raw HTML, a script, an iframe or an event attribute).', ['status' => 400]);
+        }
+
+        // Render as the tweak frame does: block paths and data attributes, in the context of the page.
+        global $post;
+        $old_post = $post;
+        $post     = get_post($post_id);
+        setup_postdata($post);
+        self::$frame   = true;
+        self::$post_id = $post_id;
+        self::walk($real, '', (int) $path);
+
+        $styles = wp_styles();
+        $queue  = $styles->queue;
+        $after  = [];
+        foreach ($styles->registered as $h => $s) $after[$h] = count((array) ($s->extra['after'] ?? []));
+
+        $html = '';
+        foreach ($real as $b) $html .= render_block($b);
+        $html = wptexturize($html);
+        if (function_exists('wp_filter_content_tags')) $html = wp_filter_content_tags($html, 'the_content');
+
+        // The styles the blocks asked for: block stylesheets (a block type not on the page yet has none loaded),
+        // their inline additions, and the layout / spacing CSS that block supports make for this markup.
+        $out = [];
+        foreach ($styles->queue as $h) {
+            $s = $styles->registered[$h] ?? null;
+            if (!$s) continue;
+            $new_inline = array_slice((array) ($s->extra['after'] ?? []), in_array($h, $queue, true) ? ($after[$h] ?? 0) : 0);
+            $href = '';
+            if (!in_array($h, $queue, true) && is_string($s->src) && $s->src !== '') {
+                $href = $s->src;
+                if (!preg_match('#^(https?:)?//#', $href)) $href = $styles->base_url . $href;
+                if ($s->ver !== null) $href = add_query_arg('ver', $s->ver ?: $styles->default_version, $href); // as WP_Styles::_css_href
+            }
+            $inline = implode("\n", array_filter(array_map('strval', $new_inline)));
+            if ($href !== '' || $inline !== '') $out[] = ['id' => $h, 'href' => $href, 'inline' => $inline];
+        }
+        $css = function_exists('wp_style_engine_get_stylesheet_from_context')
+            ? (string) wp_style_engine_get_stylesheet_from_context('block-supports', ['prettify' => false]) : '';
+        // Layout classes are numbered per request (wp-container-core-group-is-layout-1): the page has its own with the
+        // same numbers, so the section's get a suffix in its HTML and CSS alike.
+        $sfx = '-evt' . strtolower(wp_generate_password(6, false, false));
+        $ren = function ($t) use ($sfx) {
+            return preg_replace('/\b(wp-(?:container|elements)-[a-z0-9-]*?\d+)(?![a-z0-9-])/', '$1' . $sfx, (string) $t);
+        };
+        $html = $ren($html);
+        $css  = $ren($css);
+        foreach ($out as &$o) $o['inline'] = $ren($o['inline']);
+        unset($o);
+
+        self::$frame = false;
+        $post = $old_post;
+        if ($old_post) setup_postdata($old_post); else wp_reset_postdata();
+
+        $res = rest_ensure_response(['path' => $path, 'html' => $html, 'styles' => $out, 'css' => (string) $css]);
+        $res->header('Cache-Control', 'no-store');
+        return $res;
+    }
+
+    /** evive #549: images of the media library, newest first, 24 per page; search as the media library does (title, caption, description). */
+    public static function rest_media(WP_REST_Request $req) {
+        $search = trim(sanitize_text_field((string) $req->get_param('search')));
+        $page   = max(1, (int) $req->get_param('page'));
+        $args   = [
+            'post_type' => 'attachment', 'post_status' => 'inherit', 'post_mime_type' => 'image',
+            'posts_per_page' => 24, 'paged' => $page, 'orderby' => 'date', 'order' => 'DESC', 'no_found_rows' => false,
+        ];
+        if ($search !== '') $args['s'] = $search;
+        $q     = new WP_Query($args);
+        $items = [];
+        foreach ($q->posts as $a) {
+            $url = wp_get_attachment_url($a->ID);
+            if (!$url) continue;
+            $thumb = wp_get_attachment_image_src($a->ID, 'medium');
+            $meta  = wp_get_attachment_metadata($a->ID);
+            $items[] = [
+                'id'        => $a->ID,
+                'title'     => get_the_title($a),
+                'alt'       => (string) get_post_meta($a->ID, '_wp_attachment_image_alt', true),
+                'url'       => $url,
+                'thumb'     => $thumb ? $thumb[0] : $url,
+                'width'     => (int) ($meta['width'] ?? 0) ?: null,
+                'height'    => (int) ($meta['height'] ?? 0) ?: null,
+                'mime_type' => get_post_mime_type($a),
+            ];
+        }
+        $res = rest_ensure_response(['items' => $items, 'page' => $page, 'pages' => (int) $q->max_num_pages, 'total' => (int) $q->found_posts]);
+        $res->header('Cache-Control', 'no-store');
+        return $res;
+    }
+
     // ── Tweak mode pages ────────────────────────────────────────────────────
 
     /** template_redirect, after Evive_Preview_Token::maybe_serve_preview (priority 1) checked the preview token. */
@@ -434,7 +576,9 @@ class Evive_Tweak {
             add_action('wp_enqueue_scripts', function () {
                 wp_enqueue_style('evive-tweak-frame', plugins_url('assets/tweak-frame.css', EVIVE_PATH . 'evive-connector.php'), [], EVIVE_VERSION);
                 wp_enqueue_script('evive-tweak-frame', plugins_url('assets/tweak-frame.js', EVIVE_PATH . 'evive-connector.php'), [], EVIVE_VERSION, true);
-                wp_localize_script('evive-tweak-frame', 'eviveTweakFrame', ['media' => self::media()]);
+                wp_localize_script('evive-tweak-frame', 'eviveTweakFrame', ['media' => self::media(),
+                    // evive #549: the layout preview renders through the site's own REST route (tweak token).
+                    'rest' => rest_url('evive/v1/tweak/'), 'post_id' => $post_id, 'token' => $tweak]);
             });
             return;
         }
@@ -456,6 +600,7 @@ class Evive_Tweak {
             'token'    => $tweak,
             'expires'  => (int) get_post_meta($post_id, '_evive_tweak_token_expires', true),
             'widths'   => apply_filters('evive_tweak_widths', ['desktop' => 1280, 'tablet' => 820, 'phone' => 390]),
+            'rest'     => rest_url('evive/v1/tweak/'), // evive #549: the media library for Replace image
         ];
         // evive #539: tweaking the pending copy of a live page: the bar shows the band and Publish / Discard changes.
         $live_id = class_exists('Evive_Pending') ? Evive_Pending::live_of($post_id) : 0;
@@ -502,14 +647,18 @@ class Evive_Tweak {
     <button type="button" data-act="shorter" title="Less space at the bottom (Shift: 5 steps)" hidden>Shorter</button>
     <button type="button" data-act="taller" title="More space at the bottom (Shift: 5 steps)" hidden>Taller</button>
     <button type="button" data-act="hidephone" aria-pressed="false" title="Hide this block on phones">Hide on phone</button>
-    <button type="button" data-act="reset" title="Undo the text edit of this block, or else its tweaks on this screen size">Reset</button>
+    <button type="button" data-act="layout" title="Change the layout of this section (a pattern of the theme), with all its text">Change layout</button>
+    <button type="button" data-act="image" title="Put another image here: upload one (or drop it on the image) or pick one from the media library">Replace image</button>
+    <button type="button" data-act="reset" title="Undo the image, text edit or new layout of this block, or else its tweaks on this screen size">Reset</button>
   </div>
   <div class="evt-group">
     <button type="button" id="evt-save" class="evt-primary" disabled>Save</button>
     <span id="evt-status" role="status"></span>
   </div>
 </div>
-<div id="evt-stage"><iframe id="evt-frame" title="Page preview" src="<?php echo esc_url($frame_url); ?>"></iframe></div>
+<div id="evt-stage"><iframe id="evt-frame" title="Page preview" src="<?php echo esc_url($frame_url); ?>"></iframe>
+<div id="evt-panel" role="dialog" aria-modal="false" aria-labelledby="evt-panel-title" hidden></div><?php // evive #549: Change layout / Replace image ?>
+</div>
 <script>window.eviveTweakConfig = <?php echo wp_json_encode($config); ?>;</script>
 <script src="<?php echo esc_url($base . 'tweak-shell.js?ver=' . EVIVE_VERSION); ?>"></script>
 </body>

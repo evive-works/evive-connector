@@ -2,6 +2,28 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
+## Unreleased
+
+- Tweak mode: change a section's layout and replace images (evive #549, with the evive app #548 and MCP #547).
+  **Change layout** (a top-level section selected): a panel next to the frame with the theme's patterns that can hold
+  all of the section's content (thumbnails and reasons for the ones not offered, from the app's `/api/tweak/layouts`).
+  A click lets evive convert the section (`/api/tweak/convert`, a spinner for the few seconds it takes) and shows the
+  result in the frame, rendered by the site itself; **Use this layout** keeps it, **Cancel** (or Esc) puts the section
+  back exactly as it was. Save sends `{path, block, replace: {before_hash, markup}}`; Reset on the section restores the
+  old one. A section with unsaved tweaks, text edits or images must be saved or reset first (the new layout is made
+  from the saved section). Tweaks and text edits keep working on the blocks of the new layout.
+  **Replace image** (an image block selected, also the placeholder image of a new layout): upload from the computer
+  (button, or drop the file on the panel or straight on the image in the frame) through evive (`/api/tweak/upload`:
+  SVG cleaned, WebP, max 20 MB, alt text made when none is given), or pick one from the media library (search, more
+  pages). The alt text is prefilled and can be changed. The image shows in place at once; Save sends
+  `{path, block: "core/image", image: {id, url, alt}}`, Reset puts the old image back. Layout and image are the same on
+  every screen size. Works the same on drafts and on pending copies of live pages.
+- New REST routes for the tweak frame, authorised by the page's tweak token (header `X-Evive-Tweak`), read only:
+  `POST /evive/v1/tweak/render {post_id, path, markup}` renders one section's block markup as the page would (block
+  paths and tweak data attributes, the block stylesheets and block-support CSS it needs; layout classes get a suffix so
+  they don't clash with the page's own) and refuses markup with core/html, scripts, iframes or event attributes;
+  `GET /evive/v1/tweak/media?post_id=&search=&page=` lists the images of the media library (24 per page).
+
 ## 1.5.3 — 2026-11-24
 
 - Pending changes for Elementor pages (evive #552). `POST /pending/{type}/{id}` on a published page with

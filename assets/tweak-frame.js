@@ -11,7 +11,11 @@
  * Only inline formatting is kept (bold, italic, links, mark, span); paste is plain text. A text change is sent as
  * {path, block, text: {before, after}} with before = the saved inner HTML as the page was opened.
  * evive #543: a FAQ (core/details) edits its own <summary> (the question) like a heading. Clicks never open or close a
- * FAQ in tweak mode (so the caret stays); the toolbar's Open FAQ / Close FAQ does, to reach the answer paragraphs. */
+ * FAQ in tweak mode (so the caret stays); the toolbar's Open FAQ / Close FAQ does, to reach the answer paragraphs.
+ * evive #549: a section's new layout (block markup from evive) is rendered by the site (POST evive/v1/tweak/render,
+ * tweak token) and swapped in for the section (preview); Use keeps it as a change {path, block, replace}, Cancel / Reset
+ * put the old section back. An image block gets another image at once (src, alt) as a change {path, block, image};
+ * an image file dropped on an image block goes to the toolbar (tweak-shell.js uploads it). */
 (function () {
   'use strict';
   var cfg = window.eviveTweakFrame || {};
@@ -62,22 +66,26 @@
   }
   function parentBlock(node) { return node && node.parentElement ? blockAt(node.parentElement) : null; }
 
+  // The state of one block from its data attributes (also for the blocks of a new layout, evive #549).
+  function makeState(n) {
+    var t = {};
+    try { t = JSON.parse(n.getAttribute('data-evive-tweak') || '{}') || {}; } catch (e) { t = {}; }
+    t = clean(t);
+    var base = {};
+    try { base = JSON.parse(n.getAttribute('data-evive-space') || '{}') || {}; } catch (e) { base = {}; }
+    var st = { block: n.getAttribute('data-evive-block') || '', tweak: t, original: JSON.stringify(t), base: base };
+    if (n.hasAttribute('data-evive-text') && textElement(n)) {
+      var src = n.getAttribute('data-evive-text');
+      st.text = { before: src, after: src };
+      n.classList.add('evt-text');
+    }
+    // The live rules below replace the server's CSS for this block while tweaking.
+    Array.prototype.slice.call(n.classList).forEach(function (c) { if (c.indexOf('evive-tw-') === 0) n.classList.remove(c); });
+    return st;
+  }
+
   function init() {
-    document.querySelectorAll('[data-evive-path]').forEach(function (n) {
-      var t = {};
-      try { t = JSON.parse(n.getAttribute('data-evive-tweak') || '{}') || {}; } catch (e) { t = {}; }
-      t = clean(t);
-      var base = {};
-      try { base = JSON.parse(n.getAttribute('data-evive-space') || '{}') || {}; } catch (e) { base = {}; }
-      state[pathOf(n)] = { block: n.getAttribute('data-evive-block') || '', tweak: t, original: JSON.stringify(t), base: base };
-      if (n.hasAttribute('data-evive-text') && textElement(n)) {
-        var src = n.getAttribute('data-evive-text');
-        state[pathOf(n)].text = { before: src, after: src };
-        n.classList.add('evt-text');
-      }
-      // The live rules below replace the server's CSS for this block while tweaking.
-      Array.prototype.slice.call(n.classList).forEach(function (c) { if (c.indexOf('evive-tw-') === 0) n.classList.remove(c); });
-    });
+    document.querySelectorAll('[data-evive-path]').forEach(function (n) { state[pathOf(n)] = makeState(n); });
     live = document.createElement('style');
     live.id = 'evt-live';
     document.head.appendChild(live);
@@ -345,6 +353,38 @@
     if (editing.el.contains(e.target) && e.dataTransfer) insertPlain(e.dataTransfer.getData('text/plain'));
   }, true);
   document.addEventListener('dragover', function (e) { if (editing) e.preventDefault(); }, true);
+
+  // evive #549: an image file dropped on an image block: the toolbar uploads it and puts it in.
+  var dropOn = null;
+  function hasFiles(e) { return !!(e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') >= 0); }
+  function imageBlockAt(node) {
+    var b = blockAt(node);
+    return b && b.getAttribute('data-evive-block') === 'core/image' && b.querySelector('img') ? b : null;
+  }
+  function dropMark(b) {
+    if (dropOn === b) return;
+    if (dropOn) dropOn.classList.remove('evt-drop');
+    dropOn = b;
+    if (dropOn) dropOn.classList.add('evt-drop');
+  }
+  document.addEventListener('dragover', function (e) {
+    if (editing || !hasFiles(e)) return;
+    e.preventDefault(); // never let the browser open the file instead of the page
+    var b = imageBlockAt(e.target);
+    e.dataTransfer.dropEffect = b ? 'copy' : 'none';
+    dropMark(b);
+  }, true);
+  document.addEventListener('dragleave', function (e) { if (!e.relatedTarget) dropMark(null); }, true);
+  document.addEventListener('drop', function (e) {
+    if (editing || !hasFiles(e)) return;
+    e.preventDefault(); e.stopPropagation();
+    var b = imageBlockAt(e.target), file = e.dataTransfer.files && e.dataTransfer.files[0];
+    dropMark(null);
+    var s = shell();
+    if (!b || !file || !s || !s.dropImage) return;
+    select(b);
+    s.dropImage(pathOf(b), file);
+  }, true);
   document.addEventListener('input', function (e) { if (editing && editing.el.contains(e.target)) notify(); }, true); // live Save count
 
   function select(node) {
@@ -461,22 +501,33 @@
   }
 
   function changes() {
-    return Object.keys(state).filter(function (p) {
+    // evive #549: a new layout is a change of its own (the whole section), an image too (never with a tweak or text).
+    var out = [];
+    Object.keys(layouts).forEach(function (p) {
+      if (layouts[p].used) out.push({ path: p, block: layouts[p].block, replace: layouts[p].used.replace });
+    });
+    Object.keys(state).forEach(function (p) {
+      var im = state[p].image;
+      if (im) out.push({ path: p, block: 'core/image', image: { id: im.id, url: im.url, alt: im.alt } });
+    });
+    return out.concat(Object.keys(state).filter(function (p) {
       return JSON.stringify(state[p].tweak) !== state[p].original || textChanged(state[p]);
     }).map(function (p) {
       var st = state[p], t = st.tweak, c = { path: p, block: st.block };
       if (JSON.stringify(t) !== st.original) c.tweak = Object.keys(t).length ? t : null;
       if (textChanged(st)) c.text = { before: st.text.before, after: st.text.after }; // evive #533
       return c;
-    });
+    }));
   }
 
   // evive #533: what the Save button counts: every changed tweak and every changed text.
   function count() {
     var n = 0;
+    Object.keys(layouts).forEach(function (p) { if (layouts[p].used) n++; }); // evive #549
     Object.keys(state).forEach(function (p) {
       if (JSON.stringify(state[p].tweak) !== state[p].original) n++;
       if (textChanged(state[p])) n++;
+      if (state[p].image) n++; // evive #549
     });
     return n;
   }
@@ -490,7 +541,12 @@
       section: isSection(selected), // evive #532
       hasParent: !!parentBlock(selected),
       hasText: !!st.text, textChanged: textChanged(st), editing: !!editing, // evive #533
-      details: selected.tagName === 'DETAILS', open: !!selected.open // evive #543
+      details: selected.tagName === 'DETAILS', open: !!selected.open, // evive #543
+      // evive #549: the top-level section (Change layout) and the image block (Replace image)
+      top: p.indexOf('.') < 0, section_path: p.split('.')[0], sectionDirty: sectionDirty(p.split('.')[0]),
+      layout: layoutStatus(p.split('.')[0]),
+      image: imageOf(selected) ? { src: imageOf(selected).currentSrc || imageOf(selected).src, alt: st.image ? st.image.alt : imageOf(selected).getAttribute('alt') || '', id: st.image ? st.image.id : null } : null,
+      imageChanged: !!st.image
     };
   }
 
@@ -560,6 +616,128 @@
     box.addEventListener('pointercancel', up);
   }
 
+  // ── Layouts and images (evive #549) ────────────────────────────────────
+
+  // path of a top-level section -> {block, orig, used, preview}; each {node, states, replace?, title?}. The one shown
+  // is preview || used || orig: its block states are the live ones in `state`, the others keep theirs.
+  var layouts = {};
+  function sectionNode(path) { return document.querySelector('[data-evive-path="' + String(path).replace(/[^0-9]/g, '') + '"]'); }
+  function subtree(path) { return Object.keys(state).filter(function (k) { return k === path || k.indexOf(path + '.') === 0; }); }
+  function takeStates(path) { var o = {}; subtree(path).forEach(function (k) { o[k] = state[k]; delete state[k]; }); return o; }
+  function shown(L) { return L.preview || L.used || L.orig; }
+  function swapTo(path, L, target) {
+    var cur = shown(L);
+    if (cur === target) return;
+    if (editing) stopEdit();
+    cur.states = takeStates(path);
+    cur.node.replaceWith(target.node);
+    Object.keys(target.states || {}).forEach(function (k) { state[k] = target.states[k]; });
+    render();
+  }
+  // Unsaved tweaks, texts or images in a section (a new layout is made from the saved section, so they would be lost).
+  function sectionDirty(path) {
+    return subtree(path).some(function (k) {
+      var st = state[k];
+      return JSON.stringify(st.tweak) !== st.original || textChanged(st) || !!st.image;
+    });
+  }
+  function layoutStatus(path) {
+    var L = layouts[path];
+    if (!L) return null;
+    return L.preview ? { state: 'preview', title: L.preview.title || '' } : L.used ? { state: 'used', title: L.used.title || '' } : null;
+  }
+  function imageOf(node) { return node && node.getAttribute('data-evive-block') === 'core/image' ? node.querySelector('img') : null; }
+  // The block styles of a rendered section: stylesheets the page doesn't have yet, inline CSS, block-support CSS.
+  function addStyles(j) {
+    (j.styles || []).forEach(function (s) {
+      if (s.href && !document.getElementById(s.id + '-css')) {
+        var l = document.createElement('link');
+        l.rel = 'stylesheet'; l.id = s.id + '-css'; l.href = s.href;
+        document.head.appendChild(l);
+      }
+      if (s.inline) { var st = document.createElement('style'); st.setAttribute('data-evt-layout', s.id); st.textContent = s.inline; document.head.appendChild(st); }
+    });
+    if (j.css) { var c = document.createElement('style'); c.setAttribute('data-evt-layout', 'block-supports'); c.textContent = j.css; document.head.appendChild(c); }
+  }
+  function previewLayout(path, markup, meta) {
+    path = String(path);
+    meta = meta || {};
+    if (!cfg.rest || !cfg.token) return Promise.reject(new Error('This page has no tweak connection for previews.'));
+    if (!sectionNode(path)) return Promise.reject(new Error('Section ' + path + ' is not on this page.'));
+    return fetch(cfg.rest + 'render', {
+      method: 'POST', credentials: 'omit',
+      headers: { 'Content-Type': 'application/json', 'X-Evive-Tweak': cfg.token },
+      body: JSON.stringify({ post_id: cfg.post_id, path: path, markup: markup })
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        var j = null; try { j = JSON.parse(t); } catch (e) { /* not JSON */ }
+        if (!r.ok || !j || typeof j.html !== 'string') throw new Error((j && j.message) || ('the site answered ' + r.status));
+        return j;
+      });
+    }).then(function (j) {
+      var tpl = document.createElement('template');
+      tpl.innerHTML = j.html.trim();
+      var node = tpl.content.firstElementChild;
+      if (!node || pathOf(node) !== path) throw new Error('the site did not render this section');
+      addStyles(j);
+      var L = layouts[path];
+      if (!L) L = layouts[path] = { block: meta.block || (state[path] && state[path].block) || '', orig: { node: sectionNode(path) }, used: null, preview: null };
+      var states = {};
+      [node].concat(Array.prototype.slice.call(node.querySelectorAll('[data-evive-path]'))).forEach(function (n) { states[pathOf(n)] = makeState(n); });
+      var next = { node: node, states: states, replace: { before_hash: meta.before_hash || '', markup: markup }, title: meta.title || '' };
+      swapTo(path, L, next);
+      L.preview = next;
+      select(node);
+      return true;
+    });
+  }
+  function useLayout(path) {
+    var L = layouts[String(path)];
+    if (!L || !L.preview) return;
+    L.used = L.preview; L.preview = null;
+    select(shown(L).node);
+  }
+  function cancelLayout(path) {
+    path = String(path);
+    var L = layouts[path];
+    if (!L || !L.preview) return;
+    var back = L.used || L.orig;
+    swapTo(path, L, back);
+    L.preview = null;
+    if (!L.used) delete layouts[path]; // exactly as before
+    select(back.node);
+  }
+  function resetLayout(path) {
+    var L = layouts[path];
+    if (!L) return;
+    swapTo(path, L, L.orig);
+    delete layouts[path];
+    select(L.orig.node);
+  }
+  // Show another image at once; Save sends {path, block: "core/image", image: {id, url, alt}}.
+  function setImage(path, img) {
+    var node = document.querySelector('[data-evive-path="' + String(path).replace(/[^0-9.]/g, '') + '"]');
+    var st = node && state[pathOf(node)], el = imageOf(node);
+    if (!st || !el || !img || !img.id || !img.url) return false;
+    if (!st.imgShown) {
+      st.imgShown = {};
+      ['src', 'srcset', 'sizes', 'alt'].forEach(function (a) { st.imgShown[a] = el.getAttribute(a); });
+    }
+    st.image = { id: Number(img.id), url: String(img.url), alt: img.alt == null ? (st.image ? st.image.alt : el.getAttribute('alt') || '') : String(img.alt) };
+    el.removeAttribute('srcset'); el.removeAttribute('sizes');
+    el.setAttribute('src', st.image.url);
+    el.setAttribute('alt', st.image.alt);
+    place(); notify();
+    return true;
+  }
+  function resetImage(st, node) {
+    var el = imageOf(node);
+    if (el && st.imgShown) {
+      Object.keys(st.imgShown).forEach(function (a) { if (st.imgShown[a] == null) el.removeAttribute(a); else el.setAttribute(a, st.imgShown[a]); });
+    }
+    delete st.image; st.imgShown = null;
+  }
+
   var api = {
     setDevice: function (d) { if (SIZES.indexOf(d) >= 0) { device = d; notify(); } },
     selectParent: function () { if (selected) select(parentBlock(selected) || selected); },
@@ -592,6 +770,7 @@
       if (!selected) return;
       if (editing) stopEdit();
       var st = state[pathOf(selected)];
+      if (st.image) { resetImage(st, selected); place(); notify(); return; } // evive #549: the image first
       // evive #533: a text edit is undone first (its own step); the next Reset undoes the tweak of this size.
       if (textChanged(st)) {
         st.text.after = st.text.before;
@@ -600,11 +779,20 @@
         place(); notify();
         return;
       }
+      // evive #549: a section with a new layout gets its old section back (with the old tweaks and texts).
+      var p = pathOf(selected);
+      if (layouts[p] && (layouts[p].used || layouts[p].preview) && shown(layouts[p]).node === selected) { resetLayout(p); return; }
       var t = JSON.parse(JSON.stringify(st.tweak));
       delete t[device];
       st.tweak = clean(t);
       render(); place(); notify(); // evive #532: the box follows at once
     },
+    // evive #549
+    previewLayout: previewLayout,
+    useLayout: useLayout,
+    cancelLayout: cancelLayout,
+    setImage: setImage,
+    sectionDirty: sectionDirty,
     editText: function () { if (selected) startEdit(selected); }, // evive #533
     // evive #543: open or close the selected FAQ (clicks on its question don't while tweaking).
     toggleOpen: function () {
@@ -614,6 +802,7 @@
       place(); notify();
     },
     stopEdit: function () { stopEdit(); },
+    refresh: function () { notify(); }, // evive #549
     changes: changes,
     info: info,
     saved: function () {
@@ -624,7 +813,9 @@
           state[p].text.before = state[p].text.after;
           state[p].text.shown = null;
         }
+        if (state[p].image) { delete state[p].image; state[p].imgShown = null; } // evive #549: the saved image stays
       });
+      Object.keys(layouts).forEach(function (p) { if (layouts[p].used && !layouts[p].preview) delete layouts[p]; }); // evive #549
       notify();
     },
     key: function (e) {
