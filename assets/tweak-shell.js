@@ -295,11 +295,10 @@
   }
   function useLayout() {
     if (!previewing || !api) return;
-    var t = previewing.title;
     api.useLayout(previewing.path);
     previewing = null;
     closePanel(false);
-    say('New layout ' + t + ': Save to keep it, Reset to go back.');
+    say('New layout: Save keeps it.'); // short: a longer status wraps the bar (the frame would move)
   }
 
   // Replace image: upload (button or drop) or the media library; the alt text can be changed.
