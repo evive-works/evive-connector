@@ -86,6 +86,7 @@ function evive_save_elementor_data(int $post_id, array $elements): bool {
  * @return mixed|WP_Error
  */
 function evive_with_elementor_lock(int $post_id, callable $fn, int $wait = 15) {
+    return $fn(); // TEMP evive #558: lock off, to reproduce the race on the test site; reverted in the next commit
     global $wpdb;
     $name = 'evive_el_' . substr(md5(DB_NAME . '|' . $wpdb->postmeta), 0, 12) . '_' . $post_id;
     $mode = null;
