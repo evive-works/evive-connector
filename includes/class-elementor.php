@@ -392,6 +392,7 @@ class Evive_Elementor {
             }
         }
 
+        usleep(300000); // TEMP evive #558: widen the read-write window for the race test; removed again
         if (!evive_save_elementor_data($page_id, $elements)) {
             return new WP_Error('save_failed', 'Failed to encode Elementor data', ['status' => 500]);
         }
