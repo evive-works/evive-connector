@@ -63,7 +63,7 @@ body { display: flex; flex-direction: column; overflow: hidden; }
 #evt-panel .evt-thumb[aria-pressed="true"] { outline: 3px solid #2d7ff9; outline-offset: -3px; }
 #evt-panel .evt-more { margin-top: 8px; width: 100%; }
 @media (max-width: 760px) {
-  #evt-panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 58%; border-radius: 10px 10px 0 0; }
+  #evt-panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 52%; border-radius: 10px 10px 0 0; }
   .evt-lays { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .evt-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }

@@ -688,6 +688,7 @@
       swapTo(path, L, next);
       L.preview = next;
       select(node);
+      try { node.scrollIntoView({ block: 'nearest' }); } catch (e) { /* old browser */ }
       return true;
     });
   }

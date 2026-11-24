@@ -204,6 +204,7 @@
   function openPanel(kind, path, title) {
     if (pstate) closePanel(true);
     pstate = { kind: kind, path: String(path) };
+    say(''); // an earlier message (e.g. "Save or Reset … first") no longer applies
     panel.innerHTML = '<div class="evt-ph"><h2 id="evt-panel-title"></h2><button type="button" class="evt-x" data-p="close" aria-label="Close">&times;</button></div>' +
       '<div class="evt-pb"></div><div class="evt-pf"></div><p class="evt-pmsg" role="status"></p>';
     panel.querySelector('h2').textContent = title;
