@@ -2,6 +2,28 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
+## Unreleased
+
+- Pending changes for Elementor pages (evive #552). `POST /pending/{type}/{id}` on a published page with
+  `_elementor_edit_mode = builder` now makes the draft copy too (before: 400 `evive_pending_no_blocks`), with the page's
+  post_content and its Elementor meta as stored: every `_elementor*` key (`_elementor_data` byte for byte,
+  `_elementor_page_settings`, `_elementor_edit_mode`, `_elementor_template_type`, `_elementor_version`, ...) and
+  `_wp_page_template`; not Elementor's caches, not Theme Builder conditions, not SEO or the slug. Element ids stay the
+  same (the copy has its own CSS file). The base (conflict check, 409) of an Elementor page also covers `_elementor_data`
+  (evive's Elementor tools change that without touching post_content); block pages keep the old base, so their copies
+  made before this release still publish. Publish: a revision of the live page that carries the old Elementor meta
+  (always made for an Elementor page, so restoring it gives the old page back), then the copy's Elementor meta and
+  post_content on the live post (same ID, URL, slug, SEO, Polylang links; an Elementor key the copy no longer has is
+  removed), Elementor's CSS file and caches of the live post cleared, cache purged, the copy to the trash. Discard,
+  preview links and the pending band work as for a block page. Status and publish answers say `builder`
+  (`elementor` / `blocks`).
+- Duplicate a page (evive #552): `POST /evive/v1/duplicate/{id}` `{title?}` (edit rights on the page) makes a draft
+  "Title – kopie" (" – copy" when the page's language is not Dutch) with the same content, excerpt, parent, order, all
+  meta (Elementor data and settings, template, featured image, custom fields, SEO), terms and Polylang language (no
+  translation link). Not copied: slug, edit lock, old slugs, `_evive_*` meta (pending links, preview tokens), Elementor
+  caches and Theme Builder conditions. Answers `id`, `title`, `builder`, `edit_url` and a `preview_url` (as
+  `POST /preview-token` gives).
+
 ## 1.5.2 — 2026-11-24
 
 - Elementor writes no longer lose each other's changes (evive #558). On 23 Nov 2026 (PROD, whyatwork.nl page 13446)

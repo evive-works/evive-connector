@@ -246,3 +246,45 @@ function evive_verify_same_site_url(string $url): array {
 
     return ['ok' => false, 'status' => $code2 ?? $code ?? 'request_failed', 'checked' => true];
 }
+
+// ── evive #552: Elementor pages as a whole (pending copy, its publish, duplicate) ──────────────────────────────────
+
+/** True when Elementor builds this post (Elementor's own test: _elementor_edit_mode = builder). */
+function evive_is_elementor_post(int $post_id): bool {
+    return get_post_meta($post_id, '_elementor_edit_mode', true) === 'builder';
+}
+
+/** Elementor's caches of a post: never copied (rebuilt from _elementor_data), cleared on the post that gets new data. */
+function evive_elementor_cache_keys(): array {
+    return ['_elementor_css', '_elementor_page_assets', '_elementor_element_cache', '_elementor_markdown_cache'];
+}
+
+/**
+ * The meta that makes an Elementor page what it is: every _elementor* key (_elementor_data, _elementor_page_settings,
+ * _elementor_edit_mode, _elementor_template_type, _elementor_version, _elementor_pro_version, ...) plus
+ * _wp_page_template, as key => the raw stored (serialized) value. Not the caches, not Theme Builder display conditions
+ * (_elementor_conditions: a copy must not take over where a template shows) and not the editor screenshot.
+ */
+function evive_elementor_meta(int $post_id): array {
+    $skip = array_merge(evive_elementor_cache_keys(), ['_elementor_conditions', '_elementor_screenshot', '_elementor_screenshot_failed']);
+    $out  = [];
+    foreach (get_post_meta($post_id) as $key => $values) {
+        if (in_array($key, $skip, true) || !isset($values[0])) continue;
+        if (strpos($key, '_elementor') === 0 || $key === '_wp_page_template') $out[$key] = $values[0];
+    }
+    return $out;
+}
+
+/** Store a raw (serialized) meta value exactly as it is, also on a revision (update_post_meta would go to its parent).
+ *  wp_slash: update_metadata unslashes, and _elementor_data's JSON is full of backslashes. */
+function evive_put_raw_meta(int $post_id, string $key, $raw): void {
+    update_metadata('post', $post_id, $key, wp_slash(maybe_unserialize($raw)));
+}
+
+/** Throw away Elementor's CSS and element cache of a post (the CSS file too), so its next view is built from the new data. */
+function evive_clear_elementor_css(int $post_id): void {
+    foreach (evive_elementor_cache_keys() as $key) delete_metadata('post', $post_id, $key);
+    if (class_exists('\Elementor\Core\Files\CSS\Post')) {
+        try { \Elementor\Core\Files\CSS\Post::create($post_id)->delete(); } catch (\Throwable $e) { /* the meta is gone: rebuilt anyway */ }
+    }
+}

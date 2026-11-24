@@ -36,6 +36,7 @@ you already configured in evive settings.
 * GET  /wp-json/evive/v1/content-map               - Full site content map
 * GET  /wp-json/evive/v1/item/{post_type}/{id}      - Get item with Elementor data
 * POST /wp-json/evive/v1/clone/{post_type}/{id}     - Clone item with new content
+* POST /wp-json/evive/v1/duplicate/{id}             - Duplicate a page as a draft (blocks or Elementor)
 * POST /wp-json/evive/v1/elementor/inject-text      - Add text to Elementor page
 * POST /wp-json/evive/v1/elementor/update-widget    - Update widget text content
 

@@ -17,6 +17,12 @@ if (!defined('ABSPATH')) exit;
  * Routes (evive/v1, edit_post on the live post): POST /pending/{type}/{id} start or return the copy, GET status,
  * POST .../publish {force?}, POST .../discard, GET /pending (all pending copies on this site).
  * Multisite: everything happens on the site the request goes to (the live post's own language site); meta is per blog.
+ *
+ * evive #552: an Elementor page (_elementor_edit_mode = builder) works the same way. The copy also gets the page's
+ * Elementor meta (evive_elementor_meta(): _elementor_data byte for byte, page settings, edit mode, template type,
+ * versions, _wp_page_template; no caches); its base also covers _elementor_data. Publish puts post_content and that
+ * meta back on the live post after a forced revision that carries the old Elementor meta, then clears the live post's
+ * Elementor CSS. A block page works exactly as before (same base formula, so copies made before #552 still publish).
  */
 class Evive_Pending {
 
@@ -66,9 +72,12 @@ class Evive_Pending {
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
-    /** The base of a live post: sha256 of its post_content and post_modified_gmt. */
+    /** The base of a live post: sha256 of its post_content and post_modified_gmt. evive #552: an Elementor page also
+     *  its _elementor_data (evive's Elementor tools write that without touching post_content or post_modified). */
     public static function base_of(WP_Post $live) {
-        return hash('sha256', $live->post_content . "\n" . $live->post_modified_gmt);
+        $base = $live->post_content . "\n" . $live->post_modified_gmt;
+        if (evive_is_elementor_post($live->ID)) $base .= "\n" . (string) get_post_meta($live->ID, '_elementor_data', true);
+        return hash('sha256', $base);
     }
 
     /** The live post ID a copy belongs to, or 0 when $post_id is not a pending copy. */
@@ -135,6 +144,7 @@ class Evive_Pending {
             'title'       => get_the_title($live),
             'pending'     => (bool) $copy,
             'copy_id'     => $copy ? $copy->ID : null,
+            'builder'     => evive_is_elementor_post($live->ID) ? 'elementor' : 'blocks', // evive #552
         ];
         if ($copy) {
             $base = (string) get_post_meta($copy->ID, self::BASE_META, true);
@@ -167,8 +177,10 @@ class Evive_Pending {
                 'Pending changes are only for published pages; this one is "' . $live->post_status . '": tweak it directly.',
                 ['status' => 400]);
         }
-        if (!function_exists('has_blocks') || !has_blocks($live->post_content)) {
-            return new WP_Error('evive_pending_no_blocks', 'Pending changes need a block page (no block content found).', ['status' => 400]);
+        // evive #552: an Elementor page works too (its Elementor meta goes with the copy and back on publish).
+        $elementor = evive_is_elementor_post($live->ID);
+        if (!$elementor && (!function_exists('has_blocks') || !has_blocks($live->post_content))) {
+            return new WP_Error('evive_pending_no_blocks', 'Pending changes need a block page or an Elementor page (neither found).', ['status' => 400]);
         }
 
         // D1: a draft with the same content, title, parent, template and featured image; no slug (drafts get none),
@@ -191,6 +203,11 @@ class Evive_Pending {
 
         $template = get_post_meta($live->ID, '_wp_page_template', true);
         if ($template) update_post_meta($copy_id, '_wp_page_template', $template);
+        // evive #552: the Elementor meta as stored (_elementor_data byte for byte; element ids stay, the copy gets its
+        // own CSS file). Not the caches, not SEO: only what evive_elementor_meta() lists.
+        if ($elementor) {
+            foreach (evive_elementor_meta($live->ID) as $key => $raw) evive_put_raw_meta($copy_id, $key, $raw);
+        }
         $thumb = get_post_thumbnail_id($live->ID);
         if ($thumb) set_post_thumbnail($copy_id, $thumb);
         // Polylang: the same language, but no translation link (the evive-language links stay on the live post).
@@ -231,8 +248,20 @@ class Evive_Pending {
         // A revision of the live state as it is now, to go back to. wp_save_post_revision() saves nothing when the
         // latest revision already equals the post; then that latest revision is the one.
         $restore_id = 0;
+        $elementor  = evive_is_elementor_post($live->ID) || evive_is_elementor_post($copy->ID); // evive #552
         if (wp_revisions_enabled($live)) {
-            $rev = wp_save_post_revision($live->ID);
+            // evive #552: an Elementor page always gets its own revision (its post_content often does not change, so
+            // WordPress would skip it), with the live Elementor meta on it: restoring it gives the old page back.
+            $force_rev = function () { return false; };
+            if ($elementor) add_filter('wp_save_post_revision_check_for_changes', $force_rev);
+            try {
+                $rev = wp_save_post_revision($live->ID);
+            } finally {
+                if ($elementor) remove_filter('wp_save_post_revision_check_for_changes', $force_rev);
+            }
+            if ($elementor && $rev && !is_wp_error($rev)) {
+                foreach (evive_elementor_meta($live->ID) as $key => $raw) evive_put_raw_meta((int) $rev, $key, $raw);
+            }
             if ($rev && !is_wp_error($rev)) {
                 $restore_id = (int) $rev;
             } else {
@@ -242,12 +271,24 @@ class Evive_Pending {
             }
         }
 
+        // evive #552: an Elementor page gets the copy's Elementor meta first (so the revision WordPress makes on the
+        // update below has the new state); a key the copy no longer has is removed from the live post. Same ID, slug,
+        // SEO and Polylang links: only these keys and post_content change.
+        if ($elementor) {
+            $new = evive_elementor_meta($copy->ID);
+            foreach ($new as $key => $raw) evive_put_raw_meta($live->ID, $key, $raw);
+            foreach (array_keys(evive_elementor_meta($live->ID)) as $key) {
+                if (!array_key_exists($key, $new)) delete_metadata('post', $live->ID, $key);
+            }
+        }
+
         self::$internal = true;
         $res = wp_update_post(wp_slash(['ID' => $live->ID, 'post_content' => $copy->post_content]), true);
         self::$internal = false;
         if (is_wp_error($res)) {
             return new WP_Error('evive_pending_publish_failed', 'Could not publish the pending changes: ' . $res->get_error_message(), ['status' => 500]);
         }
+        if ($elementor) evive_clear_elementor_css($live->ID); // evive #552: CSS file + caches of the live post
         evive_purge_post_cache($live->ID);
 
         $this->drop_copy($live->ID, $copy->ID);
@@ -255,6 +296,7 @@ class Evive_Pending {
         return rest_ensure_response([
             'published'           => true,
             'live_id'             => $live->ID,
+            'builder'             => $elementor ? 'elementor' : 'blocks', // evive #552
             'live_url'            => get_permalink($after),
             'forced'              => $changed && $force,
             'restore_revision_id' => $restore_id ?: null,

@@ -14,6 +14,16 @@ class Evive_Clone {
             ],
         ]);
 
+        // evive #552: duplicate any page or post 1-to-1 (blocks or Elementor) as a draft.
+        register_rest_route('evive/v1', '/duplicate/(?P<id>\d+)', [
+            'methods'             => 'POST',
+            'callback'            => [$this, 'duplicate_item'],
+            'permission_callback' => [$this, 'can_duplicate'],
+            'args' => [
+                'id' => ['required' => true, 'validate_callback' => function ($v) { return is_numeric($v); }],
+            ],
+        ]);
+
         register_rest_route('evive/v1', '/delete/(?P<post_type>[a-zA-Z0-9_-]+)/(?P<id>\d+)', [
             'methods'             => 'DELETE',
             'callback'            => [$this, 'delete_item'],
@@ -191,6 +201,95 @@ class Evive_Clone {
             'status'       => $new_post['post_status'],
             'language_slug'=> function_exists('pll_get_post_language') ? pll_get_post_language($new_id, 'slug') : null,
         ]);
+    }
+
+    /** evive #552: edit rights on the source and the right to make posts of its type. A missing post: the callback (404). */
+    public function can_duplicate(WP_REST_Request $request) {
+        $source = get_post((int) $request->get_param('id'));
+        if (!$source) return current_user_can('edit_posts');
+        $type = get_post_type_object($source->post_type);
+        if (current_user_can('edit_post', $source->ID) && $type && current_user_can($type->cap->edit_posts)) return true;
+        return new WP_Error('evive_forbidden', 'evive needs edit rights on this page to duplicate it.', ['status' => rest_authorization_required_code()]);
+    }
+
+    /**
+     * evive #552: POST /duplicate/{id} {title?}. A draft "Title – kopie" (" – copy" when the page's language is not
+     * Dutch) with the same content, excerpt, parent, order, meta (Elementor data and settings, template, featured image,
+     * custom fields, SEO), terms and Polylang language (no translation link). Not copied: slug, edit locks, old slugs,
+     * evive's own _evive_* meta (pending links, preview tokens), Elementor's caches and Theme Builder conditions.
+     * Answers the new id, edit URL and a preview link (as POST /preview-token gives).
+     */
+    public function duplicate_item(WP_REST_Request $request) {
+        $source = get_post((int) $request->get_param('id'));
+        if (!$source || in_array($source->post_type, ['revision', 'attachment', 'nav_menu_item'], true)) {
+            return new WP_Error('not_found', 'Post not found', ['status' => 404]);
+        }
+        $body = $request->get_json_params() ?: [];
+
+        $locale = function_exists('pll_get_post_language') ? (string) pll_get_post_language($source->ID, 'locale') : '';
+        if ($locale === '') $locale = get_locale();
+        $suffix = strpos($locale, 'nl') === 0 ? ' – kopie' : ' – copy';
+        $title  = isset($body['title']) && trim((string) $body['title']) !== '' ? (string) $body['title'] : $source->post_title . $suffix;
+
+        $new_id = wp_insert_post(wp_slash([
+            'post_type'      => $source->post_type,
+            'post_status'    => 'draft',
+            'post_title'     => $title,
+            'post_content'   => $source->post_content,
+            'post_excerpt'   => $source->post_excerpt,
+            'post_parent'    => $source->post_parent,
+            'menu_order'     => $source->menu_order,
+            'post_author'    => get_current_user_id() ?: $source->post_author,
+            'comment_status' => $source->comment_status,
+            'ping_status'    => $source->ping_status,
+            'post_password'  => $source->post_password,
+        ]), true);
+        if (is_wp_error($new_id)) {
+            return new WP_Error('insert_failed', 'Could not duplicate: ' . $new_id->get_error_message(), ['status' => 500]);
+        }
+
+        // Meta as stored (evive_put_raw_meta: _elementor_data byte for byte).
+        $skip = array_merge(evive_elementor_cache_keys(), [
+            '_edit_lock', '_edit_last', '_wp_old_slug', '_wp_old_date', '_wp_trash_meta_status', '_wp_trash_meta_time',
+            '_wp_desired_post_slug', '_elementor_conditions', '_elementor_screenshot', '_elementor_screenshot_failed',
+        ]);
+        foreach (get_post_meta($source->ID) as $key => $values) {
+            if (in_array($key, $skip, true) || strpos($key, '_evive_') === 0) continue;
+            delete_metadata('post', $new_id, $key); // wp_insert_post may have set a default (e.g. _wp_page_template)
+            foreach ($values as $raw) add_metadata('post', $new_id, $key, wp_slash(maybe_unserialize($raw)));
+        }
+
+        // Terms, except Polylang's own (the language is set through its API: no translation link).
+        foreach (get_object_taxonomies($source->post_type) as $tax) {
+            if (in_array($tax, ['language', 'post_translations'], true)) continue;
+            $terms = wp_get_object_terms($source->ID, $tax, ['fields' => 'ids']);
+            if (!is_wp_error($terms) && $terms) wp_set_object_terms($new_id, array_map('intval', $terms), $tax);
+        }
+        if (function_exists('pll_get_post_language') && function_exists('pll_set_post_language')) {
+            $lang = pll_get_post_language($source->ID);
+            if ($lang) pll_set_post_language($new_id, $lang);
+        }
+
+        $out = [
+            'success'   => true,
+            'id'        => $new_id,
+            'source_id' => $source->ID,
+            'post_type' => $source->post_type,
+            'title'     => get_the_title($new_id),
+            'status'    => 'draft',
+            'builder'   => evive_is_elementor_post($new_id) ? 'elementor' : (has_blocks($source->post_content) ? 'blocks' : 'classic'),
+            'edit_url'  => admin_url("post.php?post={$new_id}&action=edit"),
+        ];
+        $preview_request = new WP_REST_Request('POST', '/evive/v1/preview-token/' . $source->post_type . '/' . $new_id);
+        $preview_request->set_param('post_type', $source->post_type);
+        $preview_request->set_param('id', $new_id);
+        $preview = (new Evive_Preview_Token())->generate_token($preview_request);
+        if (!is_wp_error($preview)) {
+            $data = $preview->get_data();
+            $out['preview_url'] = $data['preview_url'] ?? null;
+            $out['preview_expires_at'] = $data['expires_at'] ?? null;
+        }
+        return rest_ensure_response($out);
     }
 
     public function delete_item(WP_REST_Request $request) {
