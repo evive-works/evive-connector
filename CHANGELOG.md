@@ -2,7 +2,7 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
-## Unreleased
+## 1.5.4 — 2026-11-24
 
 - Tweak mode: change a section's layout and replace images (evive #549, with the evive app #548 and MCP #547).
   **Change layout** (a top-level section selected): a panel next to the frame with the theme's patterns that can hold
