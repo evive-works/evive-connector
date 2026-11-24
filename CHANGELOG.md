@@ -2,7 +2,7 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
-## Unreleased
+## 1.5.2 — 2026-11-24
 
 - Elementor writes no longer lose each other's changes (evive #558). On 23 Nov 2026 (PROD, whyatwork.nl page 13446)
   evive sent several `update-widget` calls for one page in parallel: each read the whole `_elementor_data`, changed
