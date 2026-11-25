@@ -2,7 +2,7 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
-## Unreleased
+## 1.6.0 — 2026-11-25
 
 - Multisite languages (evive #510): the evive-language plugin (0.1.1) is now part of the Connector, in `language/`.
   Translation links between the sites of a Multisite network (one site per language), hreflang tags, the language
