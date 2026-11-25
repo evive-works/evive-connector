@@ -2,7 +2,7 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
-## Unreleased
+## 1.8.1 — 2026-11-25
 
 - Tweak basics in tweak mode for block pages (evive #575, with the evive MCP #573 and app #574). New toolbar controls:
   **Layer** menu (bring to front / forward / backward / send to back / normal; this screen size), **Style** menu
