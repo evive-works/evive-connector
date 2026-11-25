@@ -176,7 +176,7 @@
   // The menus: {btn, pop, name}. Items: [label, action, checked (a boolean: a choice; null: an action), disabled] or a
   // group title (string).
   var menu = null;
-  var DEV = function () { return NAMES[device]; };
+  var DEV = function () { return NAMES[device] + (ELT && device === 'desktop' ? ' (tablet and phone follow)' : ''); }; // evive #578: as in Elementor
   function menuItems(name, i) {
     var t = (i && i.tweak) || {}, z = t.z || 0;
     if (name === 'layer') return [
