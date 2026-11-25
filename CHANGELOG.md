@@ -2,7 +2,7 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
-## Unreleased
+## 1.7.0 — 2026-11-25
 
 - Tweak mode for Elementor pages (evive #556, with the evive MCP #554 and app #555). When the evive app asks for a tweak
   view with `builder: "elementor"` (`POST /preview-token/{type}/{id}`) on a page with `_elementor_edit_mode = builder`,
