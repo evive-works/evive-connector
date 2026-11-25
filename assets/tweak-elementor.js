@@ -187,6 +187,10 @@
   function clickAt(target, x, y) {
     if (editing) stopEdit();
     var hit = eltAt(target);
+    if (!hit && x != null && document.elementsFromPoint) { // evive #578: an element sent behind the page (z-index < 0) is still selectable
+      var under = document.elementsFromPoint(x, y);
+      for (var u = 0; u < under.length && !hit; u++) { var c = eltAt(under[u]); if (c && state[idOf(c)]) hit = c; }
+    }
     clearTimeout(parentTimer);
     if (!hit || !state[idOf(hit)]) {
       // E4: the header, footer and other templates, and global widgets, are shown but not tweaked.
