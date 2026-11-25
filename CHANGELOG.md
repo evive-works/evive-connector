@@ -2,7 +2,7 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
-## Unreleased
+## 1.8.0 — 2026-11-25
 
 - Update log (evive #570, design #569): every core, plugin or theme that WordPress (or the host, or WP-CLI) puts in
   place through its upgrader is logged as `{type, slug, name, from, to, time}` ("from" read from the old files just
