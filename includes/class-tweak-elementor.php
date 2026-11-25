@@ -31,8 +31,26 @@ class Evive_Tweak_Elementor {
     ];
     const DEVICES = ['desktop' => '', 'tablet' => '_tablet', 'mobile' => '_mobile'];
 
+    /** @var int The post of the Elementor tweak frame being served (0 = none). */
+    private static $frame_post = 0;
+
     public static function init() {
         add_action('rest_api_init', [__CLASS__, 'rest_routes']);
+        add_filter('get_post_metadata', [__CLASS__, 'no_element_cache'], 10, 3);
+    }
+
+    /**
+     * The frame shows the page exactly as stored (the elements and base_hash come from _elementor_data): Elementor's
+     * element cache of the page, which can be older after a write that did not clear it, is not used there.
+     */
+    public static function no_element_cache($value, $object_id, $meta_key) {
+        if (self::$frame_post && $meta_key === '_elementor_element_cache' && (int) $object_id === self::$frame_post) return [''];
+        return $value;
+    }
+
+    /** Called by Evive_Tweak::maybe_serve for the Elementor frame (before rendering starts). */
+    public static function serving($post_id) {
+        self::$frame_post = (int) $post_id;
     }
 
     public static function rest_routes() {
@@ -216,6 +234,7 @@ class Evive_Tweak_Elementor {
     /** The frame of an Elementor page: the overlay instead of the block overlay (called from Evive_Tweak::maybe_serve). */
     public static function enqueue_frame($post_id, $token) {
         $d = self::read($post_id);
+        self::$frame_post = (int) $post_id;
         wp_enqueue_style('evive-tweak-frame', plugins_url('assets/tweak-frame.css', EVIVE_PATH . 'evive-connector.php'), [], EVIVE_VERSION);
         wp_enqueue_style('evive-tweak-elementor', plugins_url('assets/tweak-elementor.css', EVIVE_PATH . 'evive-connector.php'), ['evive-tweak-frame'], EVIVE_VERSION);
         wp_enqueue_script('evive-tweak-elementor', plugins_url('assets/tweak-elementor.js', EVIVE_PATH . 'evive-connector.php'), [], EVIVE_VERSION, true);

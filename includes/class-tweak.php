@@ -589,6 +589,7 @@ class Evive_Tweak {
             show_admin_bar(false);
             if (self::builder_of($post_id) === 'elementor') { // evive #556: the Elementor overlay instead of the block one
                 self::$elementor = true;
+                Evive_Tweak_Elementor::serving($post_id);
                 add_action('wp_enqueue_scripts', function () use ($post_id, $tweak) { Evive_Tweak_Elementor::enqueue_frame($post_id, $tweak); }, 20);
                 return;
             }
