@@ -15,6 +15,9 @@ if (!defined('ABSPATH')) exit;
  * Save sends the MCP's change set {base_hash, changes: [{type: text|spacing|width|hidden|move, id, ...}]} to the evive
  * app (tweak_endpoint); nothing here writes to WordPress.
  *
+ * evive #578: the elements also give the tweak basics as saved per device (z, radius, align, crop; shadow and opacity
+ * on desktop: Elementor has one for all devices) and which basics Elementor has for them (basics: opacity, crop, align),
+ * so the #575 toolbar (Layer, Style, Align, Crop, Duplicate / Delete) works here; the change types are the MCP #576's.
  * GET /evive/v1/tweak/elementor?post_id= (tweak token in X-Evive-Tweak): the same element list and base_hash, read only.
  * The route also tells the evive app (#555) that this Connector has the Elementor tweak frame (namespace index).
  */
@@ -90,16 +93,16 @@ class Evive_Tweak_Elementor {
         return ['hash' => hash('sha256', $raw), 'elements' => $out];
     }
 
-    private static function walk(array $list, $parent, $top, array &$flat, array &$ids) {
+    private static function walk(array $list, $parent, $top, array &$flat, array &$ids, $ptype = '') {
         foreach (array_values($list) as $i => $el) {
             if (!is_array($el)) continue;
             $id = isset($el['id']) ? (string) $el['id'] : '';
             $t  = $top ?? $i + 1;
             if ($id !== '') {
                 $ids[$id] = ($ids[$id] ?? 0) + 1;
-                $flat[] = ['id' => $id, 'el' => $el, 'parent' => $parent, 'index' => $i, 'siblings' => count($list), 'top' => $t];
+                $flat[] = ['id' => $id, 'el' => $el, 'parent' => $parent, 'index' => $i, 'siblings' => count($list), 'top' => $t, 'parent_type' => $ptype];
             }
-            if (!empty($el['elements']) && is_array($el['elements'])) self::walk($el['elements'], $id !== '' ? $id : $parent, $t, $flat, $ids);
+            if (!empty($el['elements']) && is_array($el['elements'])) self::walk($el['elements'], $id !== '' ? $id : $parent, $t, $flat, $ids, (string) ($el['elType'] ?? '')); // evive #578: parent_type (align-self)
         }
     }
 
@@ -165,10 +168,111 @@ class Evive_Tweak_Elementor {
             $w = $wk ? self::width_now($s, $wk, $sfx) : null;
             if ($w) $v['width'] = $w;
             if (!empty($s['hide_' . $d])) $v['hidden'] = true;
+            $v += self::basics_now($el, $s, $sfx); // evive #578
             if ($v) $dev[$d] = $v;
         }
         if ($dev) $row['devices'] = $dev;
+        // evive #578: which tweak basics Elementor has for this element (the MCP #576 refuses the others).
+        $row['basics'] = [
+            'opacity' => $wt === 'image',
+            'crop'    => $wt === 'image',
+            'align'   => ($type === 'widget' && in_array($wt, self::ALIGN_WIDGETS, true)) ? 'own'
+                : ((($type === 'widget' || $type === 'container') && ($e['parent_type'] ?? '') === 'container') ? 'self' : ''),
+        ];
         return $row;
+    }
+
+    /**
+     * evive #578: tweak basics (MCP #576, Elementor's own settings). The same preset values as the MCP: corners in px,
+     * the two shadows, opacity of the image widget, align (own align of heading / image / text editor / icon, else
+     * align-self inside a flex container), crop = the image's height + object-fit cover + object-position.
+     */
+    const RADIUS = ['none' => 0, 's' => 4, 'm' => 8, 'l' => 16, 'round' => 999];
+    const SHADOW = [
+        'soft'   => ['horizontal' => 0, 'vertical' => 2, 'blur' => 8, 'spread' => 0, 'color' => 'rgba(0,0,0,0.12)'],
+        'medium' => ['horizontal' => 0, 'vertical' => 6, 'blur' => 20, 'spread' => 0, 'color' => 'rgba(0,0,0,0.18)'],
+    ];
+    const ALIGN_WIDGETS = ['heading', 'image', 'text-editor', 'icon'];
+
+    /** evive #578: the settings keys of the basics of one element (the MCP's eltBasicKeys). */
+    public static function basic_keys($type, $wt) {
+        $w = $type === 'widget';
+        $img = $w && $wt === 'image';
+        return [
+            'z'      => $w ? '_z_index' : 'z_index',
+            'radius' => $img ? 'image_border_radius' : ($w ? '_border_radius' : 'border_radius'),
+            'shadow' => $img ? 'image_box_shadow' : ($w ? '_box_shadow' : 'box_shadow'),
+        ];
+    }
+
+    private static function is_empty($v) {
+        if ($v === null || $v === '') return true;
+        if (is_array($v) && array_key_exists('size', $v)) return $v['size'] === '' || $v['size'] === null;
+        if (is_array($v) && array_key_exists('top', $v)) {
+            foreach (['top', 'right', 'bottom', 'left'] as $k) if (($v[$k] ?? '') !== '' && $v[$k] !== null) return false;
+            return true;
+        }
+        return false;
+    }
+
+    /** evive #578: the basics of one element on one device, as saved (the MCP's eltBasicsNow). */
+    private static function basics_now(array $el, array $s, $sfx) {
+        $type = (string) ($el['elType'] ?? '');
+        $wt   = isset($el['widgetType']) ? (string) $el['widgetType'] : '';
+        $k    = self::basic_keys($type, $wt);
+        $out  = [];
+        $z = $s[$k['z'] . $sfx] ?? null;
+        if (!self::is_empty($z) && is_numeric($z) && (int) $z !== 0) $out['z'] = (int) $z;
+        $r = $s[$k['radius'] . $sfx] ?? null;
+        if (is_array($r) && !self::is_empty($r)) {
+            $same = true;
+            foreach (['right', 'bottom', 'left'] as $x) if ((string) ($r[$x] ?? '') !== (string) ($r['top'] ?? '')) $same = false;
+            $p = 'custom';
+            if ($same && (($r['unit'] ?? 'px') ?: 'px') === 'px') {
+                foreach (self::RADIUS as $n => $px) if (is_numeric($r['top'] ?? null) && (float) $r['top'] === (float) $px) { $p = $n; break; }
+            }
+            $out['radius'] = $p;
+        }
+        if ($sfx === '') { // Elementor has one shadow and one image opacity for all devices
+            if (($s[$k['shadow'] . '_box_shadow_type'] ?? '') === 'yes') {
+                $v = $s[$k['shadow'] . '_box_shadow'] ?? null;
+                $p = 'custom';
+                foreach (self::SHADOW as $n => $sh) {
+                    $ok = is_array($v);
+                    foreach ($sh as $x => $y) if (!$ok || (string) ($v[$x] ?? '') !== (string) $y) { $ok = false; break; }
+                    if ($ok) { $p = $n; break; }
+                }
+                $out['shadow'] = $p;
+            }
+            if ($wt === 'image' && isset($s['opacity']) && !self::is_empty($s['opacity'])) {
+                $o = (int) round((float) $s['opacity']['size'] * 100);
+                $out['opacity'] = in_array($o, [100, 80, 60, 40], true) ? $o : 'custom';
+            }
+        }
+        if ($type === 'widget' && in_array($wt, self::ALIGN_WIDGETS, true) && !empty($s['align' . $sfx])) {
+            $a = (string) $s['align' . $sfx];
+            $out['align'] = ['start' => 'left', 'left' => 'left', 'center' => 'center', 'end' => 'right', 'right' => 'right'][$a] ?? 'custom';
+        } elseif (!empty($s['_flex_align_self' . $sfx])) {
+            $out['align'] = ['flex-start' => 'left', 'center' => 'center', 'flex-end' => 'right'][(string) $s['_flex_align_self' . $sfx]] ?? 'custom';
+        }
+        if ($wt === 'image' && isset($s['height' . $sfx]) && !self::is_empty($s['height' . $sfx])) {
+            $h = $s['height' . $sfx];
+            $c = ['height' => (float) $h['size'], 'unit' => (string) (($h['unit'] ?? '') ?: 'px')];
+            $pos = (string) ($s['object-position' . $sfx] ?? '');
+            $f = self::pos_focus($pos);
+            if ($f) $c['focus'] = $f;
+            $out['crop'] = $c;
+        }
+        return $out;
+    }
+
+    /** evive #578: Elementor's object-position ("top left") as a focal point {x, y} in % (the MCP's eltPosFocus). */
+    private static function pos_focus($p) {
+        $parts = explode(' ', trim((string) $p));
+        if (count($parts) !== 2) return null;
+        $xi = array_search($parts[1], ['left', 'center', 'right'], true);
+        $yi = array_search($parts[0], ['top', 'center', 'bottom'], true);
+        return ($xi === false || $yi === false) ? null : ['x' => $xi * 50, 'y' => $yi * 50];
     }
 
     private static function dims_back($v) {

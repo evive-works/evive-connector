@@ -10,3 +10,5 @@ html.evt-elementor .elementor-motion-effects-element, html.evt-elementor .elemen
 html.evt-elementor .elementor-motion-effects-element > .elementor-widget-container { transform: none !important; transition: none !important; }
 /* Popups and the lightbox never open while tweaking (clicks don't reach them); if one is open, it stays out of the way. */
 html.evt-elementor .dialog-lightbox-widget, html.evt-elementor .elementor-popup-modal { display: none !important; }
+/* evive #578: picking a focal point (the image is shown uncropped). The copy / delete marks are in tweak-frame.css (#575). */
+html.evt-elementor.evt-picking [data-evive-elt], html.evt-elementor.evt-picking [data-evive-elt] * { cursor: crosshair !important; }

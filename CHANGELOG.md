@@ -2,6 +2,22 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
+## Unreleased
+
+- Tweak basics on Elementor pages (evive #578, with the evive MCP #576 and app #577): the toolbar of #575 (**Layer**,
+  **Style**, **Align**, **Crop** + focal point, **Duplicate** / **Delete**) now also works in the Elementor tweak frame, and
+  the values are stored in Elementor's own settings, so the Elementor editor shows the same. Layer (Elementor's z-index),
+  align and crop are per device (tablet and mobile follow the device above them unless they have their own value, as in
+  Elementor); Style's corners go to desktop (the other devices follow); shadow and opacity are one value for all devices
+  (opacity only for image widgets, as in Elementor). Align is offered for headings, images, text editors and icons, and
+  for elements inside a flex container. Crop (image widgets): the shape picked becomes a height (the image's width now ×
+  the shape) with object-fit cover; the focal point is the nearest of Elementor's nine positions. Delete asks for a
+  confirm and has no undo in evive after Save. Everything shows live in the frame; after a Save with a duplicate or
+  delete, or one that was only partly saved, the page is read again. Global widgets and header / footer templates stay
+  not selectable.
+- `GET /evive/v1/tweak/elementor` also gives these values per device and `basics` (which of them Elementor has for each
+  element).
+
 ## 1.8.1 — 2026-11-25
 
 - Tweak basics in tweak mode for block pages (evive #575, with the evive MCP #573 and app #574). New toolbar controls:

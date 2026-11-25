@@ -881,7 +881,7 @@ class Evive_Tweak {
     <button type="button" data-act="shorter" title="Less space at the bottom (Shift: 5 steps)" hidden>Shorter</button>
     <button type="button" data-act="taller" title="More space at the bottom (Shift: 5 steps)" hidden>Taller</button>
     <button type="button" data-act="hidephone" aria-pressed="false" title="Hide this block on phones">Hide on phone</button>
-<?php if (!$elementor) : // evive #575: tweak basics (menus are filled by tweak-shell.js) ?>
+<?php // evive #575: tweak basics (menus are filled by tweak-shell.js); evive #578: on Elementor pages too ?>
     <span class="evt-menu"><button type="button" data-act="menu" data-menu="layer" aria-haspopup="menu" aria-expanded="false" title="Bring this block to the front or send it to the back, within its section (this screen size)">Layer</button></span>
     <span class="evt-menu"><button type="button" data-act="menu" data-menu="style" aria-haspopup="menu" aria-expanded="false" title="Corners, shadow and opacity (all screen sizes)">Style</button></span>
     <span class="evt-seg" role="group" aria-label="Align in its container (this screen size)">
@@ -892,7 +892,6 @@ class Evive_Tweak {
     <span class="evt-menu"><button type="button" data-act="menu" data-menu="crop" aria-haspopup="menu" aria-expanded="false" title="Crop this image to a shape and pick its focal point (this screen size)">Crop</button></span>
     <button type="button" data-act="duplicate" aria-pressed="false" title="Put a copy of this block right after it (on Save)">Duplicate</button>
     <button type="button" data-act="delete" aria-pressed="false" title="Remove this block from the page (on Save; undo through the revision in evive)">Delete</button>
-<?php endif; ?>
 <?php if ($elementor) : // evive #556: Elementor pages ?>
     <button type="button" data-act="hidetablet" aria-pressed="false" title="Hide this element on tablets">Hide on tablet</button>
     <button type="button" data-act="moveup" title="Move this element up within its parent">Move up</button>

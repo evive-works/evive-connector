@@ -14,6 +14,14 @@
  *   {type: 'text', id, field, before, after} | {type: 'spacing', id, device, padding: {top, right, bottom, left}, unit}
  *   | {type: 'width', id, device, value, unit} | {type: 'hidden', id, device, hidden} | {type: 'move', id, direction}
  * The toolbar sends them with base_hash to evive; nothing here writes to WordPress.
+ * evive #578: the tweak basics of #575 (the same toolbar: Layer, Style, Align, Crop + focal point, Duplicate / Delete) in
+ * Elementor's own settings, as the evive MCP #576 stores them: layer {z -5..5} per device; corners {radius none|s|m|l|round}
+ * (Style: all devices = desktop, tablet and mobile then follow it); shadow {none|soft|medium} and opacity (image widget)
+ * once for all devices (Elementor has one); align left / center / right per device (heading, image, text editor, icon:
+ * their own alignment; else align-self inside a flex container); crop of an image widget per device = a height (from the
+ * shape picked: the image's width now x the shape) + object-fit cover, with a focal point snapped to Elementor's nine
+ * positions; duplicate / delete {type, id} (the app sends them on their own; a delete has no undo). Tablet and mobile
+ * follow the device above them unless they have a value of their own (as in Elementor).
  * Elementor's own scripts keep running (sliders, animations, sticky), but clicks, taps and drags never reach them while
  * tweaking (captured on the window), and motion effects and entrance animations are paused (tweak-elementor.css). */
 (function () {
@@ -28,6 +36,8 @@
   var orders = {};  // parent id ('' = top) -> {orig: [ids], now: [ids]}
   var device = 'desktop', selected = null, hover = null, box, live, root;
   var baseHash = String(cfg.base_hash || '');
+  var structural = {}; // evive #578: id -> {op: 'duplicate'|'delete', copy (the shown copy)}
+  var picking = null;  // evive #578: the id of the image whose focal point is being picked
 
   function shell() {
     try { return window.parent !== window && window.parent.eviveTweakShell ? window.parent.eviveTweakShell : null; }
@@ -149,6 +159,7 @@
       if (ours(e.target)) return;
       if (editing && editing.el.contains(e.target)) { e.stopPropagation(); e.preventDefault(); return; } // the caret moves
       e.preventDefault(); e.stopPropagation();
+      if (picking) { pickAt(e.clientX, e.clientY); return; } // evive #578
       clickAt(e.target, e.clientX, e.clientY);
     }, true);
     window.addEventListener('submit', function (e) { e.preventDefault(); e.stopPropagation(); }, true);
@@ -376,6 +387,7 @@
   // ── Selection and the box ─────────────────────────────────────────────
   function select(node) {
     if (editing && (!node || node !== editing.node)) stopEdit();
+    if (picking && (!node || idOf(node) !== picking)) stopPick(); // evive #578
     if (selected) selected.classList.remove('evt-selected');
     selected = node || null;
     if (selected) { selected.classList.remove('evt-hover'); selected.classList.add('evt-selected'); }
@@ -411,11 +423,13 @@
   function changedAt(st, d, prop) {
     var o = origDev(st)[d] || {}, n = st.dev[d] || {};
     if (prop === 'padding') return JSON.stringify([o.padding || null, o.padding_unit || null]) !== JSON.stringify([n.padding || null, n.padding_unit || null]);
+    if (prop === 'crop') return JSON.stringify(cropNorm(o.crop)) !== JSON.stringify(cropNorm(n.crop)); // evive #578
     return JSON.stringify(o[prop] == null ? null : o[prop]) !== JSON.stringify(n[prop] == null ? null : n[prop]);
   }
   // The device whose value applies on device d (Elementor: desktop -> tablet -> mobile), or null.
   function owner(st, d, prop) {
     if (prop === 'hidden') return d;
+    if (prop === 'shadow' || prop === 'opacity') return dv(st, 'desktop')[prop] ? 'desktop' : null; // evive #578: one for all devices
     if (prop === 'width' && st.row.el_type === 'column') return dv(st, d).width ? d : null; // columns are full width on phones
     for (var i = DEVS.indexOf(d); i >= 0; i--) if (dv(st, DEVS[i])[prop]) return DEVS[i];
     return null;
@@ -540,6 +554,7 @@
         else r.push('--width:' + w, 'width:' + w + ' !important');
       } else if (t === 'section') out += s + '>.elementor-container{max-width:' + w + ' !important}';
     }
+    out += basicCss(st, d, s); // evive #578
     if (r.length) out = s + '{' + r.join(';') + '}' + out;
     return out;
   }
@@ -555,6 +570,164 @@
   }
   function changed() { render(); place(); notify(); }
 
+  // ── Tweak basics (evive #578, MCP #576) ───────────────────────────────
+  var BASIC_PROPS = ['z', 'radius', 'shadow', 'opacity', 'align', 'crop'];
+  var RADIUS_PX = { none: 0, s: 4, m: 8, l: 16, round: 999 }; // the MCP's ELT_RADIUS
+  var SHADOW_CSS = { soft: '0px 2px 8px 0px rgba(0,0,0,0.12)', medium: '0px 6px 20px 0px rgba(0,0,0,0.18)' }; // the MCP's ELT_SHADOW (Elementor's own values)
+  var ASPECT = { '16-9': 9 / 16, '4-3': 3 / 4, '1-1': 1, '3-4': 4 / 3 };
+  var FX = ['left', 'center', 'right'], FY = ['top', 'center', 'bottom'];
+  function cropNorm(c) { return c && c.height ? { height: c.height, unit: c.unit || 'px', focus: c.focus || null } : null; }
+  function snap(n) { return n < 100 / 3 ? 0 : n > 200 / 3 ? 100 : 50; } // the nearest of Elementor's nine positions
+  function focusPos(f) { return FY[f.y / 50] + ' ' + FX[f.x / 50]; } // Elementor's object-position ("top left")
+  function imgOf(st) { return st.row.widget_type === 'image' ? st.node.querySelector('img') : null; }
+  // The value of a basic that applies on device d (tablet and mobile follow the device above them), in dev map m.
+  function eff(m, d, prop) {
+    if (prop === 'shadow' || prop === 'opacity') return (m.desktop || {})[prop] || null;
+    for (var i = DEVS.indexOf(d); i >= 0; i--) { var v = (m[DEVS[i]] || {})[prop]; if (v) return v; }
+    return null;
+  }
+  function tweakOf(st) {
+    var m = st.dev, c = eff(m, device, 'crop'), t = {};
+    ['z', 'radius', 'shadow', 'opacity', 'align'].forEach(function (k) { var v = eff(m, device, k); if (v) t[k] = v; });
+    if (c) { t.cropped = c; t.aspect = c.aspect || 'custom'; if (c.focus) t.focus = c.focus; }
+    return t;
+  }
+  function basicWords(st, t, parts) {
+    if (t.z) parts.push(t.z === 5 ? 'in front' : t.z === -5 ? 'at the back' : 'layer ' + (t.z > 0 ? '+' : '') + t.z);
+    if (t.radius) parts.push({ none: 'square corners', round: 'round corners', custom: 'own corners' }[t.radius] || 'corners ' + { s: 'small', m: 'medium', l: 'large' }[t.radius]);
+    if (t.shadow) parts.push(t.shadow === 'custom' ? 'own shadow' : t.shadow + ' shadow');
+    if (t.opacity) parts.push(t.opacity === 'custom' ? 'own opacity' : t.opacity + '% opacity');
+    if (t.align) parts.push('aligned ' + t.align);
+    if (t.cropped) parts.push('cropped ' + (ASPECT[t.aspect] ? t.aspect.replace('-', ':') + ' (' + t.cropped.height + (t.cropped.unit || 'px') + ' high)' : 'to ' + t.cropped.height + (t.cropped.unit || 'px') + ' high'));
+    if (t.focus) parts.push('focal point ' + focusPos(t.focus));
+    if (picking === st.row.id) parts.push('click the image to set its focal point (Esc cancels)');
+    if (structural[st.row.id]) parts.push(structural[st.row.id].op === 'delete' ? 'deleted on Save' : 'duplicated on Save');
+  }
+  // Toolbar keys -> this element's values. all (Style): corners on desktop, tablet and mobile follow it.
+  function setBasic(key, value, all) {
+    var st = cur();
+    if (!st) return;
+    if (editing) stopEdit();
+    var b = st.row.basics || {}, d = device, own = function (k, v) { var p = {}; p[k] = v || undefined; setDev(st, d, p); };
+    if (key === 'z') own('z', value);
+    else if (key === 'align') { if (!b.align) return; own('align', value); }
+    else if (key === 'radius') { d = all ? 'desktop' : device; own('radius', value); if (all) ['tablet', 'mobile'].forEach(function (x) { setDev(st, x, { radius: undefined }); }); }
+    else if (key === 'shadow') { d = 'desktop'; own('shadow', value === 'none' ? null : value); }
+    else if (key === 'opacity') { if (!b.opacity) return; d = 'desktop'; own('opacity', value === 100 ? null : value); }
+    else if (key === 'aspect') {
+      if (!b.crop) return;
+      if (!value) own('crop', null);
+      else {
+        var im = imgOf(st), w = im ? im.getBoundingClientRect().width : 0, c = eff(st.dev, d, 'crop');
+        if (!w || !ASPECT[value]) return;
+        own('crop', { height: Math.max(20, Math.min(2000, Math.round(w * ASPECT[value]))), unit: 'px', focus: c && c.focus ? c.focus : undefined, aspect: value });
+      }
+    } else if (key === 'focus') {
+      var cc = eff(st.dev, d, 'crop');
+      if (!b.crop || !cc) return;
+      own('crop', Object.assign({}, cc, { focus: value || undefined }));
+    } else return;
+    var prop = key === 'aspect' || key === 'focus' ? 'crop' : key;
+    if (!value && d !== 'desktop' && owner(st, d, prop) && owner(st, d, prop) !== d) {
+      hint('Elementor uses the ' + NAMES[owner(st, d, prop)] + ' value on ' + NAMES[d] + ' too: change it there, or pick another value for ' + NAMES[d] + '.');
+    }
+    changed();
+  }
+  // The change set of one element on device d (the MCP #576 types).
+  function basicChanges(st, d, out) {
+    var v = dv(st, d), id = st.row.id;
+    if (changedAt(st, d, 'z')) out.push({ type: 'layer', id: id, device: d, z: v.z || null });
+    if (changedAt(st, d, 'radius')) out.push({ type: 'corners', id: id, device: d, radius: v.radius || null });
+    if (changedAt(st, d, 'align')) out.push({ type: 'align', id: id, device: d, align: v.align || null });
+    if (changedAt(st, d, 'crop')) {
+      var c = cropNorm(v.crop);
+      out.push(c ? { type: 'crop', id: id, device: d, height: c.height, unit: c.unit, focus: c.focus } : { type: 'crop', id: id, device: d, height: null });
+    }
+    if (d !== 'desktop') return;
+    if (changedAt(st, d, 'shadow')) out.push({ type: 'shadow', id: id, shadow: v.shadow || 'none' });
+    if (changedAt(st, d, 'opacity')) out.push({ type: 'opacity', id: id, opacity: v.opacity || 100 });
+  }
+  // Live CSS of the basics on device d, where it differs from the page as saved (Elementor's own CSS shows the rest).
+  function basicCss(st, d, s) {
+    var o = origDev(st), out = '', t = st.row.el_type, wt = st.row.widget_type, img = wt === 'image';
+    function diff(p) { var a = eff(st.dev, d, p), b = eff(o, d, p); return p === 'crop' ? JSON.stringify(cropNorm(a)) !== JSON.stringify(cropNorm(b)) : JSON.stringify(a) !== JSON.stringify(b); }
+    function rule(sels, decl) { out += sels.map(function (x) { return s + x; }).join(',') + '{' + decl + '}'; }
+    // Where Elementor puts corners and shadow (its selectors per kind of element; with and without the widget container).
+    var box = img ? [' img'] : t === 'widget' ? ['', '>.elementor-widget-container'] : t === 'column' ? ['>.elementor-element-populated', '>.elementor-widget-wrap'] : t === 'section' ? ['', '>.elementor-background-overlay'] : [''];
+    if (diff('z')) { var z = eff(st.dev, d, 'z'); rule([''], z ? 'z-index:' + z + ' !important;--z-index:' + z : 'z-index:auto !important;--z-index:auto'); }
+    if (diff('radius')) { var r = eff(st.dev, d, 'radius'); r = r && RADIUS_PX[r] !== undefined ? RADIUS_PX[r] + 'px' : '0px'; rule(box, 'border-radius:' + r + ' !important;--border-radius:' + r); }
+    if (diff('shadow')) { var sh = SHADOW_CSS[eff(st.dev, d, 'shadow')] || 'none'; rule(box, 'box-shadow:' + sh + ' !important'); }
+    if (diff('opacity') && img) { var op = eff(st.dev, d, 'opacity'); rule([' img'], 'opacity:' + (op && op !== 'custom' ? op / 100 : 1) + ' !important'); }
+    if (diff('align') && st.row.basics && st.row.basics.align) {
+      var a = eff(st.dev, d, 'align');
+      if (st.row.basics.align === 'own') rule(['', '>.elementor-widget-container', ' .elementor-heading-title', ' .elementor-icon-wrapper'], 'text-align:' + (a && a !== 'custom' ? a : 'revert') + ' !important');
+      else rule([''], 'align-self:' + ({ left: 'flex-start', center: 'center', right: 'flex-end' }[a] || 'auto') + ' !important');
+    }
+    var c = cropNorm(eff(st.dev, d, 'crop'));
+    if (img && picking === st.row.id) rule([' img'], 'height:auto !important;object-fit:fill !important'); // uncropped while picking
+    else if (img && diff('crop')) {
+      if (c) rule([' img'], 'height:' + c.height + c.unit + ' !important;object-fit:cover !important;object-position:' + (c.focus ? focusPos(c.focus) : 'center center') + ' !important');
+      else rule([' img'], 'height:auto !important;object-fit:fill !important;object-position:50% 50% !important');
+    }
+    return out;
+  }
+  // Focal point: "Set focal point", then a click on the (uncropped) image; anywhere else ends picking.
+  function startPick() {
+    var st = cur();
+    if (!st || !imgOf(st) || !eff(st.dev, device, 'crop')) { hint('Crop the image first (Crop on this device): Elementor only uses a focal point on a cropped image.'); return; }
+    picking = st.row.id;
+    document.documentElement.classList.add('evt-picking');
+    box.hidden = true;
+    changed();
+  }
+  function stopPick() {
+    if (!picking) return;
+    picking = null;
+    document.documentElement.classList.remove('evt-picking');
+    box.hidden = !selected || !!editing;
+    changed();
+  }
+  function pickAt(x, y) {
+    var st = state[picking], im = st && imgOf(st), r = im && im.getBoundingClientRect();
+    stopPick();
+    if (!r || !r.width || !r.height || x < r.left || x > r.right || y < r.top || y > r.bottom) return;
+    if (selected !== st.node) select(st.node);
+    setBasic('focus', { x: snap((x - r.left) / r.width * 100), y: snap((y - r.top) / r.height * 100) });
+    hint('Focal point set (Elementor has nine positions: the nearest one is used).');
+  }
+  // Duplicate / Delete on Save (a second click or Reset undoes it). The copy is shown right after the element.
+  function ancestors(st) { var out = [], p = st.row.parent; while (p && rows[p]) { out.push(p); p = rows[p].parent; } return out; }
+  function structOk(st) { return !ancestors(st).some(function (a) { return structural[a] && structural[a].op === 'delete'; }); }
+  function toggleStructural(op) {
+    var st = cur();
+    if (!st) return;
+    if (editing) stopEdit();
+    var id = st.row.id, x = structural[id];
+    if (x) undoStructural(id);
+    if (x && x.op === op) { changed(); return; }
+    if (!structOk(st)) return;
+    x = structural[id] = { op: op };
+    if (op === 'duplicate') {
+      var c = st.node.cloneNode(true);
+      [c].concat(Array.prototype.slice.call(c.querySelectorAll('[data-evive-elt]'))).forEach(function (n) {
+        n.removeAttribute('data-evive-elt'); n.removeAttribute('contenteditable');
+        n.classList.remove('evt-selected', 'evt-hover', 'evt-text', 'evt-editing', 'evt-deleted');
+      });
+      c.classList.add('evt-copy');
+      c.setAttribute('aria-label', 'Copy of ' + (st.row.label || id) + ' (added on Save)');
+      st.node.after(c);
+      x.copy = c;
+    } else st.node.classList.add('evt-deleted');
+    changed();
+  }
+  function undoStructural(id) {
+    var x = structural[id];
+    if (!x) return;
+    if (x.copy) x.copy.remove();
+    if (state[id]) state[id].node.classList.remove('evt-deleted');
+    delete structural[id];
+  }
+
   // ── The change set, count and info for the toolbar ────────────────────
   function changes() {
     var out = [];
@@ -568,9 +741,12 @@
         if (changedAt(st, d, 'padding')) out.push({ type: 'spacing', id: id, device: d, padding: v.padding || null, unit: v.padding_unit || 'px' });
         if (changedAt(st, d, 'width')) out.push(v.width ? { type: 'width', id: id, device: d, value: v.width.value, unit: v.width.unit } : { type: 'width', id: id, device: d, value: null });
         if (changedAt(st, d, 'hidden')) out.push({ type: 'hidden', id: id, device: d, hidden: !!v.hidden });
+        basicChanges(st, d, out); // evive #578
       });
     });
-    return out.concat(moveChanges());
+    out = out.concat(moveChanges());
+    Object.keys(structural).forEach(function (id) { out.push({ type: structural[id].op, id: id }); }); // evive #578: sent last, one per call
+    return out;
   }
   function count() {
     var n = 0;
@@ -587,6 +763,8 @@
     if (changedAt(st, device, 'padding') && v.padding) parts.push('space at the bottom ' + v.padding.bottom + (v.padding_unit || 'px'));
     if (v.width) parts.push('width ' + v.width.value + v.width.unit);
     if (o.now.join() !== o.orig.join() && o.orig.indexOf(r.id) !== i) parts.push('moved');
+    var t = tweakOf(st); // evive #578
+    basicWords(st, t, parts);
     return {
       builder: 'elementor', id: r.id, label: r.label || r.el_type, block: r.label || r.el_type, path: r.id,
       el_type: r.el_type, widget_type: r.widget_type || '', device: NAMES[device], summary: parts,
@@ -594,7 +772,12 @@
       phoneHidden: !!dv(st, 'mobile').hidden, tabletHidden: !!dv(st, 'tablet').hidden,
       canUp: i > 0, canDown: i >= 0 && i < o.now.length - 1, hasParent: !!parentNode(st),
       hasText: !!fieldAt(st, null), textChanged: anyText(st), editing: !!editing,
-      shorter: isSection(st) && paddingNow(st).bottom > 0
+      shorter: isSection(st) && paddingNow(st).bottom > 0,
+      // evive #578: the basics, in the shape of the block toolbar (#575)
+      tweak: t, narrow: !!(r.basics && r.basics.align), crop: !!(r.basics && r.basics.crop) && !!imgOf(st),
+      canOpacity: !!(r.basics && r.basics.opacity), picking: picking === r.id,
+      structural: structural[r.id] ? structural[r.id].op : null, canStructural: structOk(st),
+      inner: st.node.querySelectorAll('[data-evive-elt]').length
     };
   }
   function notify() { var s = shell(); if (s) s.changed(info(), count()); }
@@ -608,6 +791,7 @@
       st.orig = JSON.stringify(st.dev);
     });
     Object.keys(orders).forEach(function (k) { orders[k].orig = orders[k].now.slice(); });
+    Object.keys(structural).forEach(undoStructural); // evive #578: the shell reads the page again after a duplicate / delete
     if (hash) baseHash = String(hash);
     notify();
     if (!cfg.rest || !cfg.token) return;
@@ -642,6 +826,7 @@
       var st = cur();
       if (!st) return;
       if (editing) stopEdit();
+      if (structural[st.row.id]) { undoStructural(st.row.id); changed(); return; } // evive #578: a duplicate / delete first
       // A text edit first, then this device's values, then the order of the element's parent.
       var f = Object.keys(st.texts).filter(function (x) { return textChanged(st, x); })[0];
       if (f) {
@@ -652,7 +837,7 @@
         return;
       }
       var o = origDev(st);
-      if (['padding', 'width', 'hidden'].some(function (p) { return changedAt(st, device, p); })) {
+      if (['padding', 'width', 'hidden'].concat(BASIC_PROPS).some(function (p) { return changedAt(st, device, p); })) {
         if (o[device]) st.dev[device] = o[device]; else delete st.dev[device];
         changed();
         return;
@@ -661,6 +846,17 @@
       hint('Nothing to reset on ' + NAMES[device] + ' for this element.');
     },
     editText: function () { var st = cur(), f = st && fieldAt(st, null); if (f) startEdit(st.node, f); },
+    // evive #578: the basics, called by the #575 toolbar (tweak-shell.js)
+    setBasic: function (key, value, all) { setBasic(key, value, all); },
+    layer: function (op) {
+      var st = cur(); if (!st) return;
+      var z = tweakOf(st).z || 0;
+      z = op === 'front' ? 5 : op === 'back' ? -5 : op === 'up' ? z + 1 : op === 'down' ? z - 1 : 0;
+      setBasic('z', Math.max(-5, Math.min(5, z)) || null);
+    },
+    pickFocus: function () { if (picking) stopPick(); else startPick(); },
+    duplicate: function () { toggleStructural('duplicate'); },
+    remove: function () { toggleStructural('delete'); },
     stopEdit: function () { stopEdit(); },
     refresh: function () { notify(); },
     changes: changes,
@@ -674,7 +870,7 @@
       if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) && e.target.ownerDocument === document) return false;
       var st = cur();
       switch (e.key) {
-        case 'Escape': if (!selected) return false; select(null); return true;
+        case 'Escape': if (picking) { stopPick(); return true; } if (!selected) return false; select(null); return true; // evive #578
         case 'Enter':
           if (!e.target || e.target.ownerDocument !== document) return false;
           /* falls through */

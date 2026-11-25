@@ -14,7 +14,12 @@
  * Style menu (corners, shadow, opacity: all screen sizes), Align left / center / right (a narrower block, this screen
  * size), Crop menu (shape + focal point: click the image; images only, this screen size), Duplicate and Delete (with a
  * confirm; on Save). The menus are buttons with arrow keys, Home / End, Esc. A Save with a duplicate or delete reads
- * the page again (the app answers reload: the block paths after it shifted). */
+ * the page again (the app answers reload: the block paths after it shifted).
+ * evive #578: the same basics on Elementor pages (tweak-elementor.js keeps them in Elementor's own settings, MCP #576):
+ * Corners in the Style menu go to desktop (tablet and mobile follow it), shadow and opacity are one value for all devices
+ * (opacity only for images), Align for elements Elementor can align, Crop for image widgets (the shape becomes a height,
+ * the focal point one of Elementor's nine positions), Delete has no undo after Save. A Save with a duplicate or delete
+ * (reload: true) or a partly saved one reads the page again. */
 (function () {
   'use strict';
   var cfg = window.eviveTweakConfig || {};
@@ -119,7 +124,7 @@
       document.querySelector('[data-act="layout"]').disabled = !(info && info.top) || !appBase || done;
       document.querySelector('[data-act="image"]').disabled = !(info && info.image) || !appBase || done;
       if (ELT) eltButtons(info); // evive #556
-      else basicButtons(info); // evive #575
+      basicButtons(info); // evive #575; evive #578: Elementor too
       dirty = count;
       save.textContent = reloadNeeded ? 'Reload page' : count ? 'Save (' + count + ')' : 'Save';
       save.disabled = reloadNeeded ? busy : (!count || busy || !cfg.endpoint || done || !!previewing);
@@ -159,8 +164,12 @@
     btn('delete').disabled = off || !(info.structural === 'delete' || (!info.structural && info.canStructural));
     btn('duplicate').setAttribute('aria-pressed', info && info.structural === 'duplicate' ? 'true' : 'false');
     btn('delete').setAttribute('aria-pressed', info && info.structural === 'delete' ? 'true' : 'false');
-    btn('duplicate').title = info && !info.canStructural && !info.structural ? 'Duplicate needs the saved block: Save or Reset a new layout or image in this section first' : 'Put a copy of this block right after it (on Save; click again to undo)';
-    btn('delete').title = info && !info.canStructural && !info.structural ? 'Delete needs the saved block: Save or Reset a new layout or image in this section first' : 'Remove this block from the page (on Save; undo through the revision in evive)';
+    btn('duplicate').title = info && !info.canStructural && !info.structural ? (ELT ? 'An element around it is deleted on Save' : 'Duplicate needs the saved block: Save or Reset a new layout or image in this section first') : 'Put a copy of this ' + (ELT ? 'element' : 'block') + ' right after it (on Save; click again to undo)';
+    btn('delete').title = info && !info.canStructural && !info.structural ? (ELT ? 'An element around it is deleted on Save' : 'Delete needs the saved block: Save or Reset a new layout or image in this section first') : ELT ? 'Remove this element from the page (on Save; this cannot be undone in tweak mode)' : 'Remove this block from the page (on Save; undo through the revision in evive)';
+    if (ELT) { // evive #578: Elementor's own z-index (not kept within a section) and alignment
+      document.querySelector('[data-menu="layer"]').title = 'Bring this element to the front or send it to the back (Elementor\'s z-index, this device)';
+      ['left', 'center', 'right'].forEach(function (v) { btn('align', v).title = info && !info.narrow ? 'Elementor can align headings, images, text editors and icons, and elements inside a flex container' : 'Align ' + v + ' (this device)'; });
+    }
     if (menu) { if (off || menu.btn.disabled) closeMenu(false); else fillMenu(); }
   }
 
@@ -178,6 +187,18 @@
       ['Send to back', function () { api.layer('back'); }, z === -5],
       ['Normal layer', function () { api.layer('normal'); }, !z]
     ];
+    if (name === 'style' && ELT) { // evive #578: Elementor's defaults; opacity only for images
+      var es = function (k, v) { return function () { api.setBasic(k, v, true); }; }, noOp = !(i && i.canOpacity);
+      return [
+        'Corners (all devices)' + (t.radius === 'custom' ? ': own value' : ''),
+        ['Default', es('radius', null), !t.radius], ['Square', es('radius', 'none'), t.radius === 'none'], ['Small', es('radius', 's'), t.radius === 's'],
+        ['Medium', es('radius', 'm'), t.radius === 'm'], ['Large', es('radius', 'l'), t.radius === 'l'], ['Round', es('radius', 'round'), t.radius === 'round'],
+        'Shadow (all devices)' + (t.shadow === 'custom' ? ': own value' : ''),
+        ['None', es('shadow', null), !t.shadow], ['Soft', es('shadow', 'soft'), t.shadow === 'soft'], ['Medium', es('shadow', 'medium'), t.shadow === 'medium'],
+        noOp ? 'Opacity (images only in Elementor)' : 'Opacity (all devices)' + (t.opacity === 'custom' ? ': own value' : ''),
+        ['100%', es('opacity', null), !t.opacity, noOp], ['80%', es('opacity', 80), t.opacity === 80, noOp], ['60%', es('opacity', 60), t.opacity === 60, noOp], ['40%', es('opacity', 40), t.opacity === 40, noOp]
+      ];
+    }
     if (name === 'style') {
       var set = function (k, v) { return function () { api.setBasic(k, v, true); }; };
       return [
@@ -195,17 +216,20 @@
       'Crop on ' + DEV(),
       ['Original', crop(null), !t.aspect], ['16:9', crop('16-9'), t.aspect === '16-9'], ['4:3', crop('4-3'), t.aspect === '4-3'],
       ['1:1', crop('1-1'), t.aspect === '1-1'], ['3:4', crop('3-4'), t.aspect === '3-4'],
-      'Focal point' + (t.focus ? ' (' + t.focus.x + '%, ' + t.focus.y + '%)' : ''),
-      [i && i.picking ? 'Cancel picking' : 'Set focal point: click the image', function () { api.pickFocus(); closeMenu(false); }, null],
+      ELT && t.cropped && t.aspect === 'custom' ? 'Cropped to ' + t.cropped.height + (t.cropped.unit || 'px') + ' high' : null, // evive #578
+      'Focal point' + (t.focus ? ' (' + (ELT ? FOCUS_WORDS(t.focus) : t.focus.x + '%, ' + t.focus.y + '%') + ')' : ''),
+      [i && i.picking ? 'Cancel picking' : 'Set focal point: click the image', function () { api.pickFocus(); closeMenu(false); }, null, ELT && !t.cropped && !(i && i.picking)],
       ['Clear focal point', function () { api.setBasic('focus', null); }, null, !t.focus]
     ];
   }
+  function FOCUS_WORDS(f) { return ['top', 'center', 'bottom'][f.y / 50] + ' ' + ['left', 'center', 'right'][f.x / 50]; } // evive #578
   function fillMenu() {
     var i = api && api.info ? api.info() : lastInfo, items = menuItems(menu.name, i);
     var focused = menu.pop.contains(document.activeElement) ? Array.prototype.indexOf.call(menu.pop.querySelectorAll('[role^="menuitem"]'), document.activeElement) : -1;
     menu.pop.innerHTML = '';
     menu.actions = [];
     items.forEach(function (it) {
+      if (it === null) return; // evive #578: an item that does not apply
       if (typeof it === 'string') {
         var h = document.createElement('div'); h.className = 'evt-mh'; h.setAttribute('role', 'presentation'); h.textContent = it;
         menu.pop.appendChild(h); return;
@@ -274,6 +298,12 @@
     if (!i) return;
     if (i.structural === 'delete') { api.remove(); return; } // undo: no question
     var n = i.inner || 0;
+    if (ELT) { // evive #578: an Elementor delete has no undo in evive
+      if (!window.confirm('Delete ' + (i.label || 'this element') + (n ? ' and the ' + n + ' element' + (n === 1 ? '' : 's') + ' inside it' : '') +
+        ' from the page? It is removed when you Save, and evive cannot undo that (Elementor\'s own revisions can).')) return;
+      api.remove();
+      return;
+    }
     if (!window.confirm('Delete this ' + (i.block || 'block').replace(/^core\//, '') + ' (' + i.path + ')' + (n ? ' and the ' + n + ' block' + (n === 1 ? '' : 's') + ' inside it' : '') +
       ' from the page? It is removed when you Save; evive keeps the earlier version as a revision (undo).')) return;
     api.remove();
@@ -302,6 +332,7 @@
         if (!r.ok) {
           var err = new Error((j && (j.error || j.message)) || ('evive answered ' + r.status));
           err.status = r.status; err.code = j && j.code; // evive #556: page_changed
+          err.partly = j && j.partly_saved ? j.partly_saved : null; // evive #578 (app #577): what was saved before the error
           throw err;
         }
         return j;
@@ -629,9 +660,9 @@
       busy = false;
       api.saved(ELT && j ? j.base_hash : undefined);
       say(ELT ? 'Saved in the Elementor settings of this page.' : 'Saved: evive applies it as a new revision.');
-      if (!ELT && j && j.reload) { // evive #575: a duplicate / delete shifted the block paths: read the page again
+      if (j && j.reload) { // evive #575: a duplicate / delete shifted the block paths: read the page again (evive #578: Elementor too)
         closeMenu(false);
-        dirty = 0; api = null; afterReady = 'Saved. The page is read again (blocks were added or removed).';
+        dirty = 0; api = null; afterReady = 'Saved. The page is read again (' + (ELT ? 'elements' : 'blocks') + ' were added or removed).';
         document.querySelectorAll('#evt-tools button').forEach(function (b) { b.disabled = true; });
         save.textContent = 'Save'; save.disabled = true;
         frame.src = frame.src;
@@ -642,6 +673,13 @@
       } catch (e) { /* no evive window */ }
     }).catch(function (err) {
       busy = false;
+      if (ELT && err.partly && err.partly.length) { // evive #578: part of the Save is stored: read the page again
+        reloadNeeded = true;
+        save.textContent = 'Reload page'; save.disabled = false;
+        pendingButtons();
+        say('Partly saved (' + err.partly.join('; ') + '). Not saved: ' + err.message + ' Reload the page to see it as stored.', true);
+        return;
+      }
       if (ELT && err.code === 'page_changed') { // evive #556: saved elsewhere after this view read it
         reloadNeeded = true;
         save.textContent = 'Reload page'; save.disabled = false;
