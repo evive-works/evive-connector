@@ -2,6 +2,18 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
+## Unreleased
+
+- Update log (evive #570, design #569): every core, plugin or theme that WordPress (or the host, or WP-CLI) puts in
+  place through its upgrader is logged as `{type, slug, name, from, to, time}` ("from" read from the old files just
+  before they are replaced, `null` for a plugin or theme that was not there yet; "to" from the new files; time in UTC).
+  One option `evive_update_log` (not autoloaded), the last 100 entries; on Multisite one log for the whole network
+  (network option). Nothing changes in how or when WordPress updates.
+- New REST route `GET /evive/v1/updates?since=<ISO date>` (read only, same rights as the site profile: `edit_posts`;
+  without a login 401): `installed` (log entries, newest first; `since` leaves out older ones), `waiting` (`core`,
+  `plugins`, `themes` counts and `items` `{type, slug, name, current, new}`, from WordPress's own update transients, no
+  forced check), `log_since` (when this Connector first kept the log) and `log_version`.
+
 ## 1.7.0 — 2026-11-25
 
 - Tweak mode for Elementor pages (evive #556, with the evive MCP #554 and app #555). When the evive app asks for a tweak

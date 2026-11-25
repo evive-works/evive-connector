@@ -67,6 +67,7 @@ require_once EVIVE_PATH . 'includes/class-items.php';
 require_once EVIVE_PATH . 'includes/class-tweak.php'; // evive #522: tweak mode + eviveTweak attribute
 require_once EVIVE_PATH . 'includes/class-tweak-elementor.php'; // evive #556: tweak mode for Elementor pages
 require_once EVIVE_PATH . 'includes/class-pending.php'; // evive #539: pending changes for published pages
+require_once EVIVE_PATH . 'includes/class-updates.php'; // evive #570: update log + GET /evive/v1/updates
 require_once EVIVE_PATH . 'language/language.php'; // evive #510: evive-language (Multisite translations) in the Connector
 
 add_action('rest_api_init', function () {
@@ -86,6 +87,7 @@ add_action('rest_api_init', function () {
     (new Evive_Cf7_Form())->register_routes();
     (new Evive_Items())->register_routes();
     (new Evive_Pending())->register_routes(); // evive #539
+    (new Evive_Updates())->register_routes(); // evive #570
 });
 
 add_action('init', 'evive_register_meta');
