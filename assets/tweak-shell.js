@@ -5,7 +5,11 @@
  * evive #549: Change layout (a section) and Replace image (an image block) open a panel next to the frame. Layouts and
  * the conversion come from evive (/api/tweak/layouts, /api/tweak/convert), the preview is rendered by the site in the
  * frame; uploads go through evive (/api/tweak/upload), the media library is read from the site (evive/v1/tweak/media).
- * Nothing is saved until Save. */
+ * Nothing is saved until Save.
+ * evive #556: an Elementor page (cfg.builder = 'elementor') has the overlay tweak-elementor.js in the frame: elements by
+ * their Elementor id, width -/+, Taller/Shorter (sections, containers), Hide on phone / tablet, Move up / down, text in
+ * place; no layouts or images. Save sends {post_id, site, base_hash, changes} (the evive MCP's change set, #554/#555);
+ * "page changed" (409) asks for a reload, because the page was saved elsewhere after this view read it. */
 (function () {
   'use strict';
   var cfg = window.eviveTweakConfig || {};
@@ -20,6 +24,8 @@
   var lastInfo = null; // evive #549: the selected block, for the panels
   var appBase = cfg.endpoint ? String(cfg.endpoint).replace(/\/apply\/?$/, '') : ''; // https://app/api/tweak
   var NAMES = { desktop: 'desktop', tablet: 'tablet', phone: 'phone' };
+  var ELT = cfg.builder === 'elementor'; // evive #556
+  var reloadNeeded = false; // evive #556: the page was saved elsewhere; Save becomes Reload
 
   function say(t, err) { status.textContent = t || ''; status.className = err ? 'evt-err' : ''; }
 
@@ -47,6 +53,7 @@
   }
 
   function describe(i) {
+    if (ELT) return describeElt(i); // evive #556
     if (!i) return 'Click a block to select it, double-click text to edit it';
     // evive #533: text editing
     if (i.editing) return (i.block || 'block').replace(/^core\//, '') + ': editing text (' +
@@ -64,8 +71,16 @@
       (parts.length ? parts.join(', ') : 'not tweaked');
   }
 
+  // evive #556: an Elementor element and what was changed on this device.
+  function describeElt(i) {
+    if (!i) return 'Click an element to select it, double-click text to edit it';
+    if (i.editing) return i.label + ': editing text (Esc or click outside ends)';
+    return i.label + ' on ' + i.device + ': ' + (i.summary && i.summary.length ? i.summary.join(', ') : 'not tweaked');
+  }
+
   window.eviveTweakShell = {
     ready: function (frameApi) { api = frameApi; api.setDevice(device); say(''); },
+    hint: function (t) { if (!busy && !reloadNeeded) say(t || ''); }, // evive #556: e.g. "the header is not part of this page"
     dropImage: function (path, file) { openImage(path, file); }, // evive #549: a file dropped on an image in the frame
     changed: function (info, count) {
       sel.textContent = describe(info);
@@ -87,13 +102,29 @@
       lastInfo = info;
       document.querySelector('[data-act="layout"]').disabled = !(info && info.top) || !appBase || done;
       document.querySelector('[data-act="image"]').disabled = !(info && info.image) || !appBase || done;
+      if (ELT) eltButtons(info); // evive #556
       dirty = count;
-      save.textContent = count ? 'Save (' + count + ')' : 'Save';
-      save.disabled = !count || busy || !cfg.endpoint || done || !!previewing;
+      save.textContent = reloadNeeded ? 'Reload page' : count ? 'Save (' + count + ')' : 'Save';
+      save.disabled = reloadNeeded ? busy : (!count || busy || !cfg.endpoint || done || !!previewing);
       if (count && !cfg.endpoint) say('No evive connection for this link: tweaks cannot be sent.', true);
       pendingButtons();
     }
   };
+
+  // evive #556: the toolbar of an Elementor element: -/+ when it has a width of its own (not a full-width section),
+  // Taller/Shorter for sections and containers, Hide on phone / tablet (not columns), Move up / down within the parent.
+  function eltButtons(info) {
+    function b(a) { return document.querySelector('[data-act="' + a + '"]'); }
+    ['smaller', 'bigger'].forEach(function (a) { b(a).hidden = !!info && !info.hasWidth; });
+    ['shorter', 'taller'].forEach(function (a) { b(a).hidden = !(info && info.section); });
+    if (!info) return;
+    b('shorter').disabled = !info.shorter;
+    b('hidephone').disabled = b('hidetablet').disabled = !info.canHide;
+    b('hidetablet').setAttribute('aria-pressed', info.tabletHidden ? 'true' : 'false');
+    b('moveup').disabled = !info.canUp;
+    b('movedown').disabled = !info.canDown;
+    if (info.editing) ['smaller', 'bigger', 'shorter', 'taller', 'hidephone', 'hidetablet', 'moveup', 'movedown', 'parent', 'reset'].forEach(function (a) { b(a).disabled = true; });
+  }
 
   // evive #539: the pending copy of a live page. Publish / Discard changes are disabled while a Save is pending
   // (unsaved tweaks or a save running); they post {post_id, site, action} to the same tweak endpoint.
@@ -115,7 +146,11 @@
     }).then(function (r) {
       return r.text().then(function (t) {
         var j = null; try { j = JSON.parse(t); } catch (e) { /* not JSON */ }
-        if (!r.ok) throw new Error((j && (j.error || j.message)) || ('evive answered ' + r.status));
+        if (!r.ok) {
+          var err = new Error((j && (j.error || j.message)) || ('evive answered ' + r.status));
+          err.status = r.status; err.code = j && j.code; // evive #556: page_changed
+          throw err;
+        }
         return j;
       });
     });
@@ -161,6 +196,9 @@
     if (a === 'taller') api.space(e.shiftKey ? 5 : 1); // evive #532
     if (a === 'shorter') api.space(e.shiftKey ? -5 : -1);
     if (a === 'hidephone') api.togglePhoneHidden();
+    if (a === 'hidetablet' && api.toggleTabletHidden) api.toggleTabletHidden(); // evive #556
+    if (a === 'moveup' && api.move) api.move('up');
+    if (a === 'movedown' && api.move) api.move('down');
     if (a === 'reset') api.reset();
     if (a === 'edittext' && api.editText) api.editText(); // evive #533
     if (a === 'toggleopen' && api.toggleOpen) api.toggleOpen(); // evive #543
@@ -402,7 +440,21 @@
     pmsg((it.title || 'Image') + ' is in place. Check the alt text, then Save.');
   }
 
+  // evive #556: after "page changed": tell evive to read the page again (GET /api/tweak/elements), then reload the frame.
+  function reloadPage() {
+    busy = true; save.disabled = true; say('Reloading the page…');
+    var again = appBase ? appCall('GET', 'elements').catch(function () { return null; }) : Promise.resolve(null);
+    again.then(function () {
+      busy = false; reloadNeeded = false; dirty = 0; api = null;
+      document.querySelectorAll('#evt-tools button').forEach(function (b) { b.disabled = true; });
+      save.textContent = 'Save'; save.disabled = true;
+      frame.src = frame.src; // a fresh frame: the page as it is stored now, with its new base_hash
+      say('Loading the page…');
+    });
+  }
+
   save.addEventListener('click', function () {
+    if (reloadNeeded) { reloadPage(); return; } // evive #556
     if (!api || !cfg.endpoint || busy || done) return;
     if (previewing) { say('Use this layout or Cancel it first.', true); return; } // evive #549
     if (pstate) closePanel(false);
@@ -410,16 +462,24 @@
     var changes = api.changes();
     if (!changes.length) return;
     var body = { post_id: cfg.post_id, site: cfg.site, changes: changes };
+    if (ELT && api.baseHash && api.baseHash()) body.base_hash = api.baseHash(); // evive #556 (E2)
     busy = true; save.disabled = true; pendingButtons(); say('Saving…');
-    send(body).then(function () {
+    send(body).then(function (j) {
       busy = false;
-      api.saved();
-      say('Saved: evive applies it as a new revision.');
+      api.saved(ELT && j ? j.base_hash : undefined);
+      say(ELT ? 'Saved in the Elementor settings of this page.' : 'Saved: evive applies it as a new revision.');
       try {
         if (window.parent !== window) window.parent.postMessage({ type: 'evive:tweak-saved', post_id: cfg.post_id, changes: changes }, new URL(cfg.endpoint).origin);
       } catch (e) { /* no evive window */ }
     }).catch(function (err) {
       busy = false;
+      if (ELT && err.code === 'page_changed') { // evive #556: saved elsewhere after this view read it
+        reloadNeeded = true;
+        save.textContent = 'Reload page'; save.disabled = false;
+        pendingButtons();
+        say('Not saved: the page was changed elsewhere (in Elementor or by evive) after this view opened. Reload the page, then make your changes again.', true);
+        return;
+      }
       save.disabled = !dirty;
       pendingButtons();
       say('Not saved: ' + err.message, true);

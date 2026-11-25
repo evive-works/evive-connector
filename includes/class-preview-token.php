@@ -71,10 +71,17 @@ class Evive_Preview_Token {
             if (!current_user_can('edit_post', $post_id)) {
                 return new WP_Error('evive_forbidden', 'Tweak mode needs edit rights on this page.', ['status' => 403]);
             }
-            [$tweak_expires, $err] = Evive_Tweak::store_token($post_id, $tweak_token, (string) $request->get_param('tweak_endpoint'));
+            // evive #556: builder "elementor" (evive app #555) opens the Elementor tweak frame; the answer says so with
+            // tweak_builder, which an older Connector never sends (the app then keeps Edit for Elementor pages).
+            [$tweak_expires, $err] = Evive_Tweak::store_token($post_id, $tweak_token, (string) $request->get_param('tweak_endpoint'), (string) $request->get_param('builder'));
             if ($err) return new WP_Error('invalid_tweak', $err, ['status' => 400]);
             $response['tweak_url']        = add_query_arg('evive_tweak', $tweak_token, $preview_url);
             $response['tweak_expires_at'] = gmdate('Y-m-d\TH:i:s\Z', $tweak_expires);
+            $response['tweak_builder']    = Evive_Tweak::builder_of($post_id);
+            if ($response['tweak_builder'] === 'elementor') {
+                $d = Evive_Tweak_Elementor::read($post_id);
+                $response['base_hash'] = $d ? $d['hash'] : null; // the page as the frame will show it (E2)
+            }
         }
 
         return rest_ensure_response($response);

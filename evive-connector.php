@@ -65,6 +65,7 @@ require_once EVIVE_PATH . 'includes/class-faq-schema.php';
 require_once EVIVE_PATH . 'includes/class-cf7-form.php';
 require_once EVIVE_PATH . 'includes/class-items.php';
 require_once EVIVE_PATH . 'includes/class-tweak.php'; // evive #522: tweak mode + eviveTweak attribute
+require_once EVIVE_PATH . 'includes/class-tweak-elementor.php'; // evive #556: tweak mode for Elementor pages
 require_once EVIVE_PATH . 'includes/class-pending.php'; // evive #539: pending changes for published pages
 require_once EVIVE_PATH . 'language/language.php'; // evive #510: evive-language (Multisite translations) in the Connector
 

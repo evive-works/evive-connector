@@ -1,0 +1,12 @@
+/* evive #556: tweak mode for Elementor pages, inside the preview frame (with tweak-frame.css for the box and text bar). */
+html.evt-elementor [data-evive-elt] { cursor: pointer; }
+html.evt-elementor [data-evive-elt].evt-locked, html.evt-elementor [data-evive-elt].evt-locked * { cursor: not-allowed; }
+html.evt-elementor .evt-text { cursor: text; }
+html.evt-elementor #evt-box { cursor: default; pointer-events: none; }
+/* Motion is paused while tweaking: Elementor's motion effects and entrance animations (everything stays in view). */
+html.evt-elementor .elementor-invisible { visibility: visible !important; }
+html.evt-elementor .animated, html.evt-elementor .elementor-element.animated { animation: none !important; }
+html.evt-elementor .elementor-motion-effects-element, html.evt-elementor .elementor-motion-effects-layer,
+html.evt-elementor .elementor-motion-effects-element > .elementor-widget-container { transform: none !important; transition: none !important; }
+/* Popups and the lightbox never open while tweaking (clicks don't reach them); if one is open, it stays out of the way. */
+html.evt-elementor .dialog-lightbox-widget, html.evt-elementor .elementor-popup-modal { display: none !important; }

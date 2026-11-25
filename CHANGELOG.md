@@ -2,6 +2,26 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
+## Unreleased
+
+- Tweak mode for Elementor pages (evive #556, with the evive MCP #554 and app #555). When the evive app asks for a tweak
+  view with `builder: "elementor"` (`POST /preview-token/{type}/{id}`) on a page with `_elementor_edit_mode = builder`,
+  the Connector answers `tweak_builder: "elementor"` (and `base_hash`) and the tweak view shows the Elementor page with
+  its own overlay (`assets/tweak-elementor.js`) instead of the block overlay. Every element of the page's own content
+  (sections, columns, containers, widgets) is marked by its Elementor id; header, footer and other templates are shown
+  but not selectable, global widgets are not selectable either. Click selects (Parent / a second click goes up the
+  Elementor tree), double-click edits a text in place (heading, text editor, button, image caption, icon list items,
+  testimonial; B / I / Link, Enter / Esc), toolbar: width − / + (5 %, or 20 px), Taller / Shorter for sections and
+  containers (padding at the bottom), Hide on phone / tablet, Move up / down within the parent, Reset. Desktop /
+  Tablet / Phone edit that device's values (Elementor's own responsive settings; the tablet and phone frames follow
+  Elementor's breakpoints). Save sends the evive MCP's change set with the page's `base_hash` (sha256 of
+  `_elementor_data`) to evive; a page saved elsewhere in the meantime gives "page changed" and a Reload button.
+  Elementor's scripts keep running, but clicks and drags don't reach them (links, sliders, lightbox) and motion effects
+  and entrance animations are paused while tweaking. Nothing in the Connector writes the page: evive saves it.
+- New REST route `GET /evive/v1/tweak/elementor?post_id=` (tweak token in `X-Evive-Tweak`, read only): the page's
+  elements (id, type, parent, label, editable texts as saved, margin/padding/width/hidden per device) and `base_hash`.
+  The evive app sees from this route that the Connector can tweak Elementor pages.
+
 ## 1.6.0 — 2026-11-25
 
 - Multisite languages (evive #510): the evive-language plugin (0.1.1) is now part of the Connector, in `language/`.

@@ -36,6 +36,8 @@ class Evive_Tweak {
     /** @var array Class names already printed. */
     private static $printed = [];
     private static $root_printed = false;
+    /** @var bool  evive #556: the frame is an Elementor page (tweak-elementor.js, no block paths). */
+    private static $elementor = false;
 
     public static function init() {
         add_filter('register_block_type_args', [__CLASS__, 'add_attribute'], 10, 2);
@@ -337,7 +339,7 @@ class Evive_Tweak {
 
     /** Tweak frame only: give every block of the post content its path (as a temporary attribute, never saved). */
     public static function annotate_paths($content) {
-        if (!self::$frame || (int) get_the_ID() !== self::$post_id) return $content;
+        if (!self::$frame || self::$elementor || (int) get_the_ID() !== self::$post_id) return $content;
         if (!function_exists('has_blocks') || !has_blocks($content)) return $content;
         $blocks = parse_blocks($content);
         self::walk($blocks, '');
@@ -377,18 +379,30 @@ class Evive_Tweak {
 
     /**
      * Store a tweak token from the evive app for a post (called by the preview-token route).
+     * evive #556: $builder 'elementor' opens the Elementor tweak frame (only for an Elementor page); '' = blocks.
      * Returns [token expiry, error message or ''].
      */
-    public static function store_token($post_id, $token, $endpoint) {
+    public static function store_token($post_id, $token, $endpoint, $builder = '') {
         $token = (string) $token;
         if (!preg_match('/^[A-Za-z0-9_-]{32,128}$/', $token)) return [0, 'tweak_token must be 32-128 characters A-Z a-z 0-9 _ -'];
         $endpoint = trim((string) $endpoint);
         if ($endpoint !== '' && !self::endpoint_ok($endpoint)) return [0, 'tweak_endpoint must be an https URL'];
+        $builder = (string) $builder;
+        if ($builder !== '' && $builder !== 'blocks' && $builder !== 'elementor') return [0, 'builder must be blocks or elementor'];
+        if ($builder === 'elementor' && !Evive_Tweak_Elementor::supports($post_id)) {
+            return [0, 'This page is not an Elementor page (or its Elementor data cannot be read), so it has no Elementor tweak view.'];
+        }
         $expires = time() + self::TOKEN_TTL;
         update_post_meta($post_id, '_evive_tweak_token_hash', hash('sha256', $token));
         update_post_meta($post_id, '_evive_tweak_token_expires', $expires);
         update_post_meta($post_id, '_evive_tweak_endpoint', esc_url_raw($endpoint));
+        update_post_meta($post_id, '_evive_tweak_builder', $builder === 'elementor' ? 'elementor' : 'blocks'); // evive #556
         return [$expires, ''];
+    }
+
+    /** evive #556: the tweak view of this post: 'elementor' when its token was made for the Elementor frame, else 'blocks'. */
+    public static function builder_of($post_id) {
+        return get_post_meta($post_id, '_evive_tweak_builder', true) === 'elementor' && Evive_Tweak_Elementor::supports($post_id) ? 'elementor' : 'blocks';
     }
 
     /** https only; http only for localhost (development). */
@@ -573,6 +587,11 @@ class Evive_Tweak {
             self::$frame   = true;
             self::$post_id = $post_id;
             show_admin_bar(false);
+            if (self::builder_of($post_id) === 'elementor') { // evive #556: the Elementor overlay instead of the block one
+                self::$elementor = true;
+                add_action('wp_enqueue_scripts', function () use ($post_id, $tweak) { Evive_Tweak_Elementor::enqueue_frame($post_id, $tweak); }, 20);
+                return;
+            }
             add_action('wp_enqueue_scripts', function () use ($post_id, $tweak) {
                 wp_enqueue_style('evive-tweak-frame', plugins_url('assets/tweak-frame.css', EVIVE_PATH . 'evive-connector.php'), [], EVIVE_VERSION);
                 wp_enqueue_script('evive-tweak-frame', plugins_url('assets/tweak-frame.js', EVIVE_PATH . 'evive-connector.php'), [], EVIVE_VERSION, true);
@@ -602,6 +621,11 @@ class Evive_Tweak {
             'widths'   => apply_filters('evive_tweak_widths', ['desktop' => 1280, 'tablet' => 820, 'phone' => 390]),
             'rest'     => rest_url('evive/v1/tweak/'), // evive #549: the media library for Replace image
         ];
+        $elementor = self::builder_of($post_id) === 'elementor'; // evive #556
+        if ($elementor) {
+            $config['builder'] = 'elementor';
+            $config['widths']  = Evive_Tweak_Elementor::widths($config['widths']);
+        }
         // evive #539: tweaking the pending copy of a live page: the bar shows the band and Publish / Discard changes.
         $live_id = class_exists('Evive_Pending') ? Evive_Pending::live_of($post_id) : 0;
         if ($live_id) {
@@ -621,7 +645,7 @@ class Evive_Tweak {
 <title>Tweak: <?php echo esc_html(get_the_title($post_id)); ?></title>
 <link rel="stylesheet" href="<?php echo esc_url($base . 'tweak-shell.css?ver=' . EVIVE_VERSION); ?>">
 </head>
-<body>
+<body<?php echo $elementor ? ' class="evt-elementor"' : ''; ?>>
 <?php if ($live_id) : // evive #539 ?>
 <div id="evt-pending" role="note">
   <span>Pending changes of a live page: visitors still see the live version</span>
@@ -640,15 +664,20 @@ class Evive_Tweak {
   <div class="evt-group evt-sel" id="evt-sel">Click a block to select it</div>
   <div class="evt-group" id="evt-tools">
     <button type="button" data-act="edittext" title="Edit the text of this block (or double-click it)">Edit text</button>
-    <button type="button" data-act="toggleopen" aria-pressed="false" title="Open or close the selected FAQ, to reach its answer (clicks on its question don't, while tweaking)">Open FAQ</button>
+    <button type="button" data-act="toggleopen" aria-pressed="false"<?php echo $elementor ? ' hidden' : ''; ?> title="Open or close the selected FAQ, to reach its answer (clicks on its question don't, while tweaking)">Open FAQ</button>
     <button type="button" data-act="parent" title="Select the parent block (click the block again)">Parent</button>
     <button type="button" data-act="smaller" title="Smaller (5 %)">&minus;</button>
     <button type="button" data-act="bigger" title="Bigger (5 %)">+</button>
     <button type="button" data-act="shorter" title="Less space at the bottom (Shift: 5 steps)" hidden>Shorter</button>
     <button type="button" data-act="taller" title="More space at the bottom (Shift: 5 steps)" hidden>Taller</button>
     <button type="button" data-act="hidephone" aria-pressed="false" title="Hide this block on phones">Hide on phone</button>
-    <button type="button" data-act="layout" title="Change the layout of this section (a pattern of the theme), with all its text">Change layout</button>
-    <button type="button" data-act="image" title="Put another image here: upload one (or drop it on the image) or pick one from the media library">Replace image</button>
+<?php if ($elementor) : // evive #556: Elementor pages ?>
+    <button type="button" data-act="hidetablet" aria-pressed="false" title="Hide this element on tablets">Hide on tablet</button>
+    <button type="button" data-act="moveup" title="Move this element up within its parent">Move up</button>
+    <button type="button" data-act="movedown" title="Move this element down within its parent">Move down</button>
+<?php endif; ?>
+    <button type="button" data-act="layout"<?php echo $elementor ? ' hidden' : ''; // evive #556: not on Elementor pages ?> title="Change the layout of this section (a pattern of the theme), with all its text">Change layout</button>
+    <button type="button" data-act="image"<?php echo $elementor ? ' hidden' : ''; ?> title="Put another image here: upload one (or drop it on the image) or pick one from the media library">Replace image</button>
     <button type="button" data-act="reset" title="Undo the image, text edit or new layout of this block, or else its tweaks on this screen size">Reset</button>
   </div>
   <div class="evt-group">
