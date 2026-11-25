@@ -2,6 +2,25 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
+## Unreleased
+
+- Tweak basics in tweak mode for block pages (evive #575, with the evive MCP #573 and app #574). New toolbar controls:
+  **Layer** menu (bring to front / forward / backward / send to back / normal; this screen size), **Style** menu
+  (corners: theme / square / small / medium / large / round, shadow: theme / none / soft / medium, opacity 100 / 80 / 60 /
+  40 %; all screen sizes), **Align** left / center / right for a narrower block (this screen size), **Crop** menu for
+  images, covers and media & text (original / 16:9 / 4:3 / 1:1 / 3:4 with object-fit cover, and a focal point: "Set focal
+  point", then click the image, shown uncropped while picking; this screen size), **Duplicate** and **Delete** (with a
+  confirm; on Save, a second click or Reset undoes it before Save; evive's revision undoes it after). The menus work with
+  the keyboard (Enter / arrows / Home / End / Esc). After a Save with a duplicate or delete the page is read again.
+- The new eviveTweak keys `z`, `radius`, `shadow`, `opacity`, `align`, `aspect`, `focus` (same values as the evive MCP)
+  render on the site as scoped CSS per screen size, like the other tweaks: the theme's radius presets
+  (`--wp--custom--radius--s|m|l`) and shadow presets (`--wp--preset--shadow--s|m`, else core's natural / deep), no colours
+  of our own (filters `evive_tweak_radius`, `evive_tweak_shadow`). A layer is `position: relative; z-index` on the block
+  and stays within its section: the top-level block around it gets `isolation: isolate`. Crop, corners and shadow of an
+  image block go on its image.
+- The tweak frame marks every block with its hash (`data-evive-hash`, sha256 of its markup as stored, as the evive MCP
+  computes it) for duplicate / delete. The block editor's tweak panel names the new keys.
+
 ## 1.8.0 — 2026-11-25
 
 - Update log (evive #570, design #569): every core, plugin or theme that WordPress (or the host, or WP-CLI) puts in

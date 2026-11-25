@@ -39,3 +39,7 @@ html.evt-on .evt-editing * { user-select: text !important; -webkit-user-select: 
 #evt-textbar button[data-cmd="done"] { background: #c8f535; color: #1a3a2a; }
 /* evive #549: an image file dragged over an image block. */
 html.evt-on .evt-drop { outline: 3px dashed #2d7ff9 !important; outline-offset: -3px; }
+/* evive #575: picking a focal point (the image is shown uncropped), a copy made on Save, a block deleted on Save. */
+html.evt-picking [data-evive-path] { cursor: crosshair !important; }
+html.evt-on .evt-copy { outline: 2px dashed #2d7ff9 !important; outline-offset: -2px; opacity: .6; }
+html.evt-on .evt-deleted { opacity: .25 !important; outline: 2px dashed #c0392b !important; outline-offset: -2px; }

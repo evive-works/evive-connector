@@ -20,6 +20,13 @@ if (!defined('ABSPATH')) exit;
  *    evive_tweak_frame=1, in which every block of the post content has a block path (data-evive-path, e.g. "2.0.1":
  *    indices of real blocks, skipping whitespace, from the top of the post content) and an overlay script.
  *    The overlay sends the tweaks to the evive app (tweak_endpoint); it never writes to WordPress itself.
+ * 3. Tweak basics (evive #575, with the evive MCP #573 and app #574), more keys per screen size, the same lists as the MCP:
+ *    z (layer within its section, -5..5; position:relative on the block, isolation on its top-level section),
+ *    radius (none|s|m|l|round: the theme's --wp--custom--radius--* presets), shadow (none|soft|medium: the theme's
+ *    shadow presets), opacity (100|80|60|40), align (left|center|right: a narrower block in its container), and for
+ *    image blocks aspect (orig|16-9|4-3|1-1|3-4: crop with object-fit cover) + focus {x, y} (0..100 %, the focal point).
+ *    Duplicate / delete of a block are changes of their own ({path, block, before_hash, duplicate|delete: true}): the
+ *    frame gives every block its hash (data-evive-hash, sha256 of its markup as stored, as the MCP computes it).
  */
 class Evive_Tweak {
 
@@ -36,11 +43,32 @@ class Evive_Tweak {
     /** @var array Class names already printed. */
     private static $printed = [];
     private static $root_printed = false;
+    /** @var bool  evive #575: a section has a layer inside it (.evive-tw-iso is printed once). */
+    private static $need_iso = false;
+    private static $iso_printed = false;
+    /** @var array evive #575: path => hash of the blocks of the tweak frame's post. */
+    private static $hashes = [];
     /** @var bool  evive #556: the frame is an Elementor page (tweak-elementor.js, no block paths). */
     private static $elementor = false;
+    /** @var array evive #575: blocks being rendered (render_block_data .. render_block), to find a block's section. */
+    private static $stack = [];
+
+    /** evive #575: the tweak basics' values (the same lists as the evive MCP #573). */
+    const BASICS = [
+        'radius'  => ['none', 's', 'm', 'l', 'round'],
+        'shadow'  => ['none', 'soft', 'medium'],
+        'opacity' => [100, 80, 60, 40],
+        'align'   => ['left', 'center', 'right'],
+        'aspect'  => ['orig', '16-9', '4-3', '1-1', '3-4'],
+    ];
+    /** evive #575: values that are the same as none (not stored). */
+    const BASICS_DEFAULT = ['opacity' => 100, 'aspect' => 'orig'];
+    /** evive #575: blocks that can be cropped (aspect / focus), as the MCP allows. */
+    const CROP_BLOCKS = ['core/image', 'core/post-featured-image', 'core/cover', 'core/media-text'];
 
     public static function init() {
         add_filter('register_block_type_args', [__CLASS__, 'add_attribute'], 10, 2);
+        add_filter('render_block_data', [__CLASS__, 'block_data'], 10, 3); // evive #575
         add_filter('render_block', [__CLASS__, 'render_block'], 10, 2);
         add_filter('the_content', [__CLASS__, 'annotate_paths'], 8);
         add_action('template_redirect', [__CLASS__, 'maybe_serve'], 2);
@@ -105,9 +133,106 @@ class Evive_Tweak {
                     if ($v !== 0) $c[$k] = $v;
                 }
             }
+            $c += self::sanitize_basics($t); // evive #575
             if ($c) $out[$size] = $c;
         }
         return $out;
+    }
+
+    /** evive #575: z, radius, shadow, opacity, align, aspect, focus of one screen size, cleaned as the MCP's tweakBasicsClean(). */
+    private static function sanitize_basics(array $t) {
+        $c = [];
+        if (isset($t['z']) && is_numeric($t['z'])) {
+            $z = max(-5, min(5, (int) round($t['z'])));
+            if ($z !== 0) $c['z'] = $z;
+        }
+        foreach (self::BASICS as $k => $list) {
+            if (!isset($t[$k]) || is_bool($t[$k]) || $t[$k] === '') continue;
+            foreach ($list as $ok) {
+                $match = is_int($ok) ? (is_numeric($t[$k]) && (float) $t[$k] === (float) $ok) : $t[$k] === $ok;
+                if ($match) {
+                    if (!isset(self::BASICS_DEFAULT[$k]) || self::BASICS_DEFAULT[$k] !== $ok) $c[$k] = $ok;
+                    break;
+                }
+            }
+        }
+        $f = $t['focus'] ?? null;
+        if (is_array($f) && isset($f['x'], $f['y']) && is_numeric($f['x']) && is_numeric($f['y'])
+            && $f['x'] >= 0 && $f['x'] <= 100 && $f['y'] >= 0 && $f['y'] <= 100) {
+            $c['focus'] = ['x' => (int) round($f['x']), 'y' => (int) round($f['y'])];
+        }
+        return $c;
+    }
+
+    /** evive #575: the CSS of a radius / shadow value: the theme's presets (evive-base), else core's, never a colour of our own. */
+    public static function radius_css($v) {
+        $map = apply_filters('evive_tweak_radius', [
+            'none'  => '0px',
+            's'     => 'var(--wp--custom--radius--s, 4px)',
+            'm'     => 'var(--wp--custom--radius--m, 8px)',
+            'l'     => 'var(--wp--custom--radius--l, 16px)',
+            'round' => '9999px',
+        ]);
+        return isset($map[$v]) ? (string) $map[$v] : '';
+    }
+    public static function shadow_css($v) {
+        $map = apply_filters('evive_tweak_shadow', [
+            'none'   => 'none',
+            'soft'   => 'var(--wp--preset--shadow--s, var(--wp--preset--shadow--natural, none))',
+            'medium' => 'var(--wp--preset--shadow--m, var(--wp--preset--shadow--deep, none))',
+        ]);
+        return isset($map[$v]) ? (string) $map[$v] : '';
+    }
+
+    /**
+     * evive #575: the rules of the basics for one screen size: [rules on the block, [sub selector => rules]].
+     * $kind: 'image' (img inside: core/image, featured image), 'cover', 'media-text' or '' (any other block).
+     * The same rules are built in tweak-frame.js (basicRules).
+     */
+    public static function basics_rules(array $t, $kind) {
+        $own = [];
+        $sub = [];
+        $add = function ($sel, $rule) use (&$sub) { $sub[$sel][] = $rule; };
+        if (!empty($t['z'])) {
+            $own[] = 'position:relative';
+            $own[] = 'z-index:' . (int) $t['z'];
+        }
+        if (isset($t['opacity'])) $own[] = 'opacity:' . ((int) $t['opacity'] / 100);
+        if (isset($t['align'])) {
+            $m = ['left' => ['0', 'auto'], 'center' => ['auto', 'auto'], 'right' => ['auto', '0']][$t['align']] ?? null;
+            if ($m) { $own[] = 'margin-left:' . $m[0] . ' !important'; $own[] = 'margin-right:' . $m[1] . ' !important'; }
+        }
+        $img = $kind === 'image' ? ' img' : ($kind === 'media-text' ? ' .wp-block-media-text__media img' : '');
+        if (isset($t['radius']) && ($r = self::radius_css($t['radius'])) !== '') {
+            if ($img !== '') $add($img, 'border-radius:' . $r . ' !important');
+            else { $own[] = 'border-radius:' . $r . ' !important'; if ($kind === 'cover') $own[] = 'overflow:hidden'; }
+        }
+        if (isset($t['shadow']) && ($sh = self::shadow_css($t['shadow'])) !== '') {
+            if ($img !== '') $add($img, 'box-shadow:' . $sh . ' !important');
+            else $own[] = 'box-shadow:' . $sh . ' !important';
+        }
+        $ratio = isset($t['aspect']) ? str_replace('-', '/', $t['aspect']) : '';
+        $pos   = isset($t['focus']) ? sprintf('object-position:%d%% %d%% !important', (int) $t['focus']['x'], (int) $t['focus']['y']) : '';
+        if ($kind === 'cover') {
+            if ($ratio !== '') { $own[] = 'aspect-ratio:' . $ratio . ' !important'; $own[] = 'min-height:0 !important'; }
+            if ($pos !== '') $add(' .wp-block-cover__image-background', $pos);
+        } elseif ($img !== '') {
+            if ($ratio !== '') {
+                $add($img, 'aspect-ratio:' . $ratio . ' !important');
+                $add($img, 'height:auto !important');
+                $add($img, 'object-fit:cover !important');
+            }
+            if ($pos !== '') $add($img, $pos);
+        }
+        return [$own, $sub];
+    }
+
+    /** evive #575: what kind of media block a block is, for basics_rules(). */
+    public static function media_kind($name) {
+        if (in_array($name, ['core/image', 'core/post-featured-image', 'core/site-logo'], true)) return 'image';
+        if ($name === 'core/cover') return 'cover';
+        if ($name === 'core/media-text') return 'media-text';
+        return '';
     }
 
     /**
@@ -202,8 +327,12 @@ class Evive_Tweak {
         return $rules;
     }
 
-    /** The scoped CSS for one tweak on class $cls. $is_image: also scale the <img> inside. $base: see space_base(). */
-    public static function css($cls, array $tweak, $is_image, array $base = []) {
+    /**
+     * The scoped CSS for one tweak on class $cls. $is_image: also scale the <img> inside. $base: see space_base().
+     * evive #575: $kind: see media_kind() (crop, corners and shadow of the image inside).
+     */
+    public static function css($cls, array $tweak, $is_image, array $base = [], $kind = null) {
+        if ($kind === null) $kind = $is_image ? 'image' : '';
         $sel   = '.' . $cls . '.' . $cls; // two classes: wins over layout styles without !important
         $media = self::media();
         $css   = '';
@@ -225,8 +354,14 @@ class Evive_Tweak {
                 }
                 $rules = array_merge($rules, self::space_rules($t, $base)); // evive #532
             }
-            if (!$rules) continue;
-            $css .= '@media ' . $media[$size] . '{' . $sel . '{' . implode(';', $rules) . '}';
+            $sub = [];
+            if (empty($t['hidden'])) { // evive #575
+                list($own, $sub) = self::basics_rules($t, $kind);
+                $rules = array_merge($rules, $own);
+            }
+            if (!$rules && !$sub) continue;
+            $css .= '@media ' . $media[$size] . '{' . ($rules ? $sel . '{' . implode(';', $rules) . '}' : '');
+            foreach ($sub as $s => $r) $css .= $sel . $s . '{' . implode(';', $r) . '}';
             if ($is_image && !empty($t['width']) && empty($t['hidden'])) {
                 // Images keep their proportions: the image fills the new width, its height follows.
                 $css .= $sel . ' img{width:100% !important;height:auto !important}';
@@ -238,11 +373,40 @@ class Evive_Tweak {
 
     // ── Rendering ───────────────────────────────────────────────────────────
 
+    /**
+     * evive #575: render_block_data: remember the blocks being rendered, so a block with a layer (z) can give its section
+     * (the top-level block of the content it is in: a block rendered without a parent block) a stacking context of its
+     * own. Every render_block_data has its render_block (WP_Block::render), which takes the entry off again.
+     */
+    public static function block_data($parsed, $source = null, $parent = null) {
+        self::$stack[] = ['root' => $parent === null, 'iso' => false, 'name' => (string) ($parsed['blockName'] ?? '')];
+        return $parsed;
+    }
+
+    /** evive #575: true when a tweak has a layer (z) on any screen size. */
+    private static function has_layer(array $tweak) {
+        foreach ($tweak as $t) if (!empty($t['z'])) return true;
+        return false;
+    }
+
     public static function render_block($content, $block) {
+        // evive #575: this block's entry of block_data() (render_block runs after the inner blocks are done).
+        // A block that a plugin rendered itself (pre_render_block) may have left its entry: drop entries down to this block's.
+        $name = (string) ($block['blockName'] ?? '');
+        $me   = ['root' => false, 'iso' => false, 'name' => $name];
+        for ($i = count(self::$stack) - 1; $i >= 0; $i--) {
+            if (self::$stack[$i]['name'] === $name) { $me = self::$stack[$i]; array_splice(self::$stack, $i); break; }
+        }
         $attrs = $block['attrs'] ?? [];
         $path  = self::$frame ? ($attrs['__evivePath'] ?? null) : null;
         $tweak = isset($attrs[self::ATTR]) ? self::sanitize($attrs[self::ATTR]) : [];
-        if (!$tweak && $path === null) return $content;
+        if ($tweak && !$me['root'] && self::has_layer($tweak)) {
+            // The section of this block: the nearest block rendered without a parent (top-level of its content).
+            for ($i = count(self::$stack) - 1; $i >= 0; $i--) {
+                if (self::$stack[$i]['root']) { self::$stack[$i]['iso'] = true; break; }
+            }
+        }
+        if (!$tweak && $path === null && !$me['iso']) return $content;
         if (!is_string($content) || trim($content) === '') return $content;
 
         $set = [];
@@ -251,12 +415,18 @@ class Evive_Tweak {
             $json      = wp_json_encode($tweak);
             $base      = self::has_space($tweak) ? self::space_base($block) : [];
             // evive #532: the class also depends on the block's own padding when there is extra space.
-            $add_class = 'evive-tw-' . substr(md5($json . ($base ? wp_json_encode($base) : '')), 0, 10);
-            $is_image  = in_array($block['blockName'] ?? '', ['core/image', 'core/post-featured-image', 'core/site-logo'], true);
+            // evive #575: and on the kind of media block (crop, corners and shadow go on its image).
+            $kind      = self::media_kind($block['blockName'] ?? '');
+            $add_class = 'evive-tw-' . substr(md5($json . ($base ? wp_json_encode($base) : '') . $kind), 0, 10);
+            $is_image  = $kind === 'image';
             if (!isset(self::$printed[$add_class]) && !isset(self::$pending[$add_class])) {
-                self::$pending[$add_class] = self::css($add_class, $tweak, $is_image, $base);
+                self::$pending[$add_class] = self::css($add_class, $tweak, $is_image, $base, $kind);
             }
             if (self::$frame) $set['data-evive-tweak'] = $json;
+        }
+        if ($me['iso']) { // evive #575: a layer inside this section stays inside it
+            $add_class = trim($add_class . ' evive-tw-iso');
+            self::$need_iso = true;
         }
         if ($path !== null) {
             $set['data-evive-path']  = (string) $path;
@@ -269,6 +439,8 @@ class Evive_Tweak {
             }
             $text = self::text_source($block);
             if ($text !== null) $set['data-evive-text'] = $text;
+            // evive #575: the block's hash as stored (duplicate / delete), see block_hashes().
+            if (isset(self::$hashes[(string) $path])) $set['data-evive-hash'] = self::$hashes[(string) $path];
         }
         return self::add_to_first_tag($content, $add_class, $set);
     }
@@ -314,12 +486,12 @@ class Evive_Tweak {
         return $m[1][0];
     }
 
-    /** Add a class and attributes to the first HTML tag of a block's output. */
+    /** Add a class (or several, space separated) and attributes to the first HTML tag of a block's output. */
     private static function add_to_first_tag($html, $class, array $set) {
         if (class_exists('WP_HTML_Tag_Processor')) {
             $p = new WP_HTML_Tag_Processor($html);
             if (!$p->next_tag()) return $html;
-            if ($class) $p->add_class($class);
+            if ($class) foreach (preg_split('/\s+/', $class) as $c) $p->add_class($c);
             foreach ($set as $k => $v) $p->set_attribute($k, $v);
             return $p->get_updated_html();
         }
@@ -343,7 +515,40 @@ class Evive_Tweak {
         if (!function_exists('has_blocks') || !has_blocks($content)) return $content;
         $blocks = parse_blocks($content);
         self::walk($blocks, '');
+        self::$hashes = self::block_hashes((string) get_post_field('post_content', self::$post_id, 'raw')); // evive #575
         return serialize_blocks($blocks);
+    }
+
+    /**
+     * evive #575: path => sha256 of every block's markup as stored in post_content (from its opening comment to its
+     * closing comment), found the way the evive MCP does (blockPaths, same delimiter pattern), so the hash is the
+     * before_hash of a duplicate / delete. Markup the MCP can't read gives [] (no duplicate / delete in the frame).
+     */
+    public static function block_hashes($content) {
+        $re = '/<!--\s+(\/)?wp:([a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)?)\s+(\{[\s\S]*?\}\s+)?(\/)?-->/';
+        if (!preg_match_all($re, $content, $all, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) return [];
+        $out = []; $stack = []; $counters = [0];
+        foreach ($all as $m) {
+            $at = $m[0][1];
+            $len = strlen($m[0][0]);
+            $name = $m[2][0];
+            if (isset($m[1]) && $m[1][1] >= 0 && $m[1][0] === '/') {
+                $open = array_pop($stack);
+                if (!$open || $open['name'] !== $name) return [];
+                array_pop($counters);
+                $out[$open['path']] = hash('sha256', substr($content, $open['start'], $at + $len - $open['start']));
+                continue;
+            }
+            $idx  = $counters[count($counters) - 1]++;
+            $path = $stack ? $stack[count($stack) - 1]['path'] . '.' . $idx : (string) $idx;
+            if (isset($m[4]) && $m[4][1] >= 0 && $m[4][0] === '/') {
+                $out[$path] = hash('sha256', $m[0][0]);
+                continue;
+            }
+            $stack[] = ['path' => $path, 'name' => $name, 'start' => $at];
+            $counters[] = 0;
+        }
+        return $stack ? [] : $out;
     }
 
     private static function walk(array &$blocks, $prefix, $first = 0) {
@@ -364,6 +569,10 @@ class Evive_Tweak {
         if (!self::$root_printed && (self::$pending || self::$frame)) {
             $css .= ':root{--evive-tweak-step:' . self::step() . '}';
             self::$root_printed = true;
+        }
+        if (self::$need_iso && !self::$iso_printed) { // evive #575
+            $css .= '.evive-tw-iso{isolation:isolate}';
+            self::$iso_printed = true;
         }
         foreach (self::$pending as $cls => $rules) {
             $css .= $rules;
@@ -672,6 +881,18 @@ class Evive_Tweak {
     <button type="button" data-act="shorter" title="Less space at the bottom (Shift: 5 steps)" hidden>Shorter</button>
     <button type="button" data-act="taller" title="More space at the bottom (Shift: 5 steps)" hidden>Taller</button>
     <button type="button" data-act="hidephone" aria-pressed="false" title="Hide this block on phones">Hide on phone</button>
+<?php if (!$elementor) : // evive #575: tweak basics (menus are filled by tweak-shell.js) ?>
+    <span class="evt-menu"><button type="button" data-act="menu" data-menu="layer" aria-haspopup="menu" aria-expanded="false" title="Bring this block to the front or send it to the back, within its section (this screen size)">Layer</button></span>
+    <span class="evt-menu"><button type="button" data-act="menu" data-menu="style" aria-haspopup="menu" aria-expanded="false" title="Corners, shadow and opacity (all screen sizes)">Style</button></span>
+    <span class="evt-seg" role="group" aria-label="Align in its container (this screen size)">
+      <button type="button" data-act="align" data-val="left" aria-pressed="false" aria-label="Align left" title="Align left in its container (a narrower block)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M2 2v12M5 5h8v6H5z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+      <button type="button" data-act="align" data-val="center" aria-pressed="false" aria-label="Align center" title="Center in its container (a narrower block)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M8 1v14M4 5h8v6H4z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+      <button type="button" data-act="align" data-val="right" aria-pressed="false" aria-label="Align right" title="Align right in its container (a narrower block)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M14 2v12M3 5h8v6H3z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+    </span>
+    <span class="evt-menu"><button type="button" data-act="menu" data-menu="crop" aria-haspopup="menu" aria-expanded="false" title="Crop this image to a shape and pick its focal point (this screen size)">Crop</button></span>
+    <button type="button" data-act="duplicate" aria-pressed="false" title="Put a copy of this block right after it (on Save)">Duplicate</button>
+    <button type="button" data-act="delete" aria-pressed="false" title="Remove this block from the page (on Save; undo through the revision in evive)">Delete</button>
+<?php endif; ?>
 <?php if ($elementor) : // evive #556: Elementor pages ?>
     <button type="button" data-act="hidetablet" aria-pressed="false" title="Hide this element on tablets">Hide on tablet</button>
     <button type="button" data-act="moveup" title="Move this element up within its parent">Move up</button>

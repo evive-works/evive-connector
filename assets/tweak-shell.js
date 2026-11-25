@@ -9,7 +9,12 @@
  * evive #556: an Elementor page (cfg.builder = 'elementor') has the overlay tweak-elementor.js in the frame: elements by
  * their Elementor id, width -/+, Taller/Shorter (sections, containers), Hide on phone / tablet, Move up / down, text in
  * place; no layouts or images. Save sends {post_id, site, base_hash, changes} (the evive MCP's change set, #554/#555);
- * "page changed" (409) asks for a reload, because the page was saved elsewhere after this view read it. */
+ * "page changed" (409) asks for a reload, because the page was saved elsewhere after this view read it.
+ * evive #575: tweak basics on block pages: Layer menu (front / forward / backward / back / normal, this screen size),
+ * Style menu (corners, shadow, opacity: all screen sizes), Align left / center / right (a narrower block, this screen
+ * size), Crop menu (shape + focal point: click the image; images only, this screen size), Duplicate and Delete (with a
+ * confirm; on Save). The menus are buttons with arrow keys, Home / End, Esc. A Save with a duplicate or delete reads
+ * the page again (the app answers reload: the block paths after it shifted). */
 (function () {
   'use strict';
   var cfg = window.eviveTweakConfig || {};
@@ -26,6 +31,7 @@
   var NAMES = { desktop: 'desktop', tablet: 'tablet', phone: 'phone' };
   var ELT = cfg.builder === 'elementor'; // evive #556
   var reloadNeeded = false; // evive #556: the page was saved elsewhere; Save becomes Reload
+  var afterReady = ''; // evive #575: the status to show when the frame has loaded again
 
   function say(t, err) { status.textContent = t || ''; status.className = err ? 'evt-err' : ''; }
 
@@ -67,6 +73,16 @@
     if (t.width) parts.push(t.width + '%');
     if (t.top) parts.push(t.top + (t.top === 1 ? ' step' : ' steps') + ' more space at the top'); // evive #532
     if (t.bottom) parts.push(t.bottom + (t.bottom === 1 ? ' step' : ' steps') + ' more space at the bottom');
+    // evive #575
+    if (t.z) parts.push(t.z === 5 ? 'in front' : t.z === -5 ? 'at the back' : 'layer ' + (t.z > 0 ? '+' : '') + t.z);
+    if (t.radius) parts.push({ none: 'square corners', round: 'round corners' }[t.radius] || 'corners ' + { s: 'small', m: 'medium', l: 'large' }[t.radius]);
+    if (t.shadow) parts.push(t.shadow === 'none' ? 'no shadow' : t.shadow + ' shadow');
+    if (t.opacity) parts.push(t.opacity + '% opacity');
+    if (t.align) parts.push('aligned ' + t.align);
+    if (t.aspect) parts.push('cropped ' + t.aspect.replace('-', ':'));
+    if (t.focus) parts.push('focal point ' + t.focus.x + '%, ' + t.focus.y + '%');
+    if (i.picking) parts.push('click the image to set its focal point (Esc cancels)');
+    if (i.structural) parts.push(i.structural === 'delete' ? 'deleted on Save' : 'duplicated on Save');
     return (i.block || 'block').replace(/^core\//, '') + ' (' + i.path + ') on ' + NAMES[i.device] + ': ' +
       (parts.length ? parts.join(', ') : 'not tweaked');
   }
@@ -79,7 +95,7 @@
   }
 
   window.eviveTweakShell = {
-    ready: function (frameApi) { api = frameApi; api.setDevice(device); say(''); },
+    ready: function (frameApi) { api = frameApi; api.setDevice(device); say(afterReady); afterReady = ''; }, // evive #575: afterReady
     hint: function (t) { if (!busy && !reloadNeeded) say(t || ''); }, // evive #556: e.g. "the header is not part of this page"
     dropImage: function (path, file) { openImage(path, file); }, // evive #549: a file dropped on an image in the frame
     changed: function (info, count) {
@@ -103,6 +119,7 @@
       document.querySelector('[data-act="layout"]').disabled = !(info && info.top) || !appBase || done;
       document.querySelector('[data-act="image"]').disabled = !(info && info.image) || !appBase || done;
       if (ELT) eltButtons(info); // evive #556
+      else basicButtons(info); // evive #575
       dirty = count;
       save.textContent = reloadNeeded ? 'Reload page' : count ? 'Save (' + count + ')' : 'Save';
       save.disabled = reloadNeeded ? busy : (!count || busy || !cfg.endpoint || done || !!previewing);
@@ -124,6 +141,142 @@
     b('moveup').disabled = !info.canUp;
     b('movedown').disabled = !info.canDown;
     if (info.editing) ['smaller', 'bigger', 'shorter', 'taller', 'hidephone', 'hidetablet', 'moveup', 'movedown', 'parent', 'reset'].forEach(function (a) { b(a).disabled = true; });
+  }
+
+  // ── Tweak basics (evive #575) ──────────────────────────────────────────
+  function btn(a, v) { return document.querySelector('[data-act="' + a + '"]' + (v ? '[data-val="' + v + '"]' : '')); }
+  function basicButtons(info) {
+    if (!btn('duplicate')) return;
+    var t = (info && info.tweak) || {}, off = !info || !!info.editing || done;
+    ['left', 'center', 'right'].forEach(function (v) {
+      var b = btn('align', v);
+      b.disabled = off || !info.narrow;
+      b.setAttribute('aria-pressed', t.align === v ? 'true' : 'false');
+    });
+    document.querySelectorAll('[data-act="menu"]').forEach(function (b) { b.disabled = off; });
+    document.querySelector('[data-menu="crop"]').disabled = off || !info.crop;
+    btn('duplicate').disabled = off || !(info.structural === 'duplicate' || (!info.structural && info.canStructural));
+    btn('delete').disabled = off || !(info.structural === 'delete' || (!info.structural && info.canStructural));
+    btn('duplicate').setAttribute('aria-pressed', info && info.structural === 'duplicate' ? 'true' : 'false');
+    btn('delete').setAttribute('aria-pressed', info && info.structural === 'delete' ? 'true' : 'false');
+    btn('duplicate').title = info && !info.canStructural && !info.structural ? 'Duplicate needs the saved block: Save or Reset a new layout or image in this section first' : 'Put a copy of this block right after it (on Save; click again to undo)';
+    btn('delete').title = info && !info.canStructural && !info.structural ? 'Delete needs the saved block: Save or Reset a new layout or image in this section first' : 'Remove this block from the page (on Save; undo through the revision in evive)';
+    if (menu) { if (off || menu.btn.disabled) closeMenu(false); else fillMenu(); }
+  }
+
+  // The menus: {btn, pop, name}. Items: [label, action, checked (a boolean: a choice; null: an action), disabled] or a
+  // group title (string).
+  var menu = null;
+  var DEV = function () { return NAMES[device]; };
+  function menuItems(name, i) {
+    var t = (i && i.tweak) || {}, z = t.z || 0;
+    if (name === 'layer') return [
+      'Layer on ' + DEV() + (z ? ' (' + (z > 0 ? '+' : '') + z + ')' : ''),
+      ['Bring to front', function () { api.layer('front'); }, z === 5],
+      ['Bring forward', function () { api.layer('up'); }, null, z >= 5],
+      ['Send backward', function () { api.layer('down'); }, null, z <= -5],
+      ['Send to back', function () { api.layer('back'); }, z === -5],
+      ['Normal layer', function () { api.layer('normal'); }, !z]
+    ];
+    if (name === 'style') {
+      var set = function (k, v) { return function () { api.setBasic(k, v, true); }; };
+      return [
+        'Corners (all screen sizes)',
+        ['Theme', set('radius', null), !t.radius], ['Square', set('radius', 'none'), t.radius === 'none'], ['Small', set('radius', 's'), t.radius === 's'],
+        ['Medium', set('radius', 'm'), t.radius === 'm'], ['Large', set('radius', 'l'), t.radius === 'l'], ['Round', set('radius', 'round'), t.radius === 'round'],
+        'Shadow',
+        ['Theme', set('shadow', null), !t.shadow], ['None', set('shadow', 'none'), t.shadow === 'none'], ['Soft', set('shadow', 'soft'), t.shadow === 'soft'], ['Medium', set('shadow', 'medium'), t.shadow === 'medium'],
+        'Opacity',
+        ['100%', set('opacity', null), !t.opacity], ['80%', set('opacity', 80), t.opacity === 80], ['60%', set('opacity', 60), t.opacity === 60], ['40%', set('opacity', 40), t.opacity === 40]
+      ];
+    }
+    var crop = function (v) { return function () { api.setBasic('aspect', v); }; };
+    return [
+      'Crop on ' + DEV(),
+      ['Original', crop(null), !t.aspect], ['16:9', crop('16-9'), t.aspect === '16-9'], ['4:3', crop('4-3'), t.aspect === '4-3'],
+      ['1:1', crop('1-1'), t.aspect === '1-1'], ['3:4', crop('3-4'), t.aspect === '3-4'],
+      'Focal point' + (t.focus ? ' (' + t.focus.x + '%, ' + t.focus.y + '%)' : ''),
+      [i && i.picking ? 'Cancel picking' : 'Set focal point: click the image', function () { api.pickFocus(); closeMenu(false); }, null],
+      ['Clear focal point', function () { api.setBasic('focus', null); }, null, !t.focus]
+    ];
+  }
+  function fillMenu() {
+    var i = api && api.info ? api.info() : lastInfo, items = menuItems(menu.name, i);
+    var focused = menu.pop.contains(document.activeElement) ? Array.prototype.indexOf.call(menu.pop.querySelectorAll('[role^="menuitem"]'), document.activeElement) : -1;
+    menu.pop.innerHTML = '';
+    menu.actions = [];
+    items.forEach(function (it) {
+      if (typeof it === 'string') {
+        var h = document.createElement('div'); h.className = 'evt-mh'; h.setAttribute('role', 'presentation'); h.textContent = it;
+        menu.pop.appendChild(h); return;
+      }
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', typeof it[2] === 'boolean' ? 'menuitemradio' : 'menuitem');
+      if (typeof it[2] === 'boolean') b.setAttribute('aria-checked', it[2] ? 'true' : 'false');
+      b.textContent = it[0];
+      b.tabIndex = -1;
+      if (it[3]) b.disabled = true;
+      b.setAttribute('data-mi', menu.actions.push(it[1]) - 1);
+      menu.pop.appendChild(b);
+    });
+    var list = menu.pop.querySelectorAll('[role^="menuitem"]');
+    if (focused >= 0 && list[focused]) { if (list[focused].disabled) focused = -1; else list[focused].focus(); }
+    return list;
+  }
+  function openMenu(b) {
+    if (menu) closeMenu(false);
+    if (!api || b.disabled) return;
+    var pop = document.createElement('div');
+    pop.className = 'evt-pop'; pop.setAttribute('role', 'menu'); pop.setAttribute('aria-label', b.textContent);
+    pop.id = 'evt-m-' + b.getAttribute('data-menu');
+    b.parentNode.appendChild(pop);
+    b.setAttribute('aria-expanded', 'true'); b.setAttribute('aria-controls', pop.id);
+    menu = { btn: b, pop: pop, name: b.getAttribute('data-menu') };
+    var list = fillMenu();
+    // Keep the menu on the screen (the bar wraps on a phone).
+    var r = pop.getBoundingClientRect();
+    if (r.right > window.innerWidth - 8) { pop.style.left = 'auto'; pop.style.right = '0'; }
+    var first = Array.prototype.filter.call(list, function (x) { return !x.disabled && x.getAttribute('aria-checked') === 'true'; })[0] ||
+      Array.prototype.filter.call(list, function (x) { return !x.disabled; })[0];
+    if (first) first.focus();
+  }
+  function closeMenu(focusBtn) {
+    if (!menu) return;
+    var m = menu; menu = null;
+    m.btn.setAttribute('aria-expanded', 'false');
+    m.pop.remove();
+    if (focusBtn) m.btn.focus();
+  }
+  function menuKey(e) {
+    var list = Array.prototype.filter.call(menu.pop.querySelectorAll('[role^="menuitem"]'), function (x) { return !x.disabled; });
+    var at = list.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { (list[(at + 1) % list.length] || list[0]).focus(); return true; }
+    if (e.key === 'ArrowUp') { (list[(at - 1 + list.length) % list.length] || list[0]).focus(); return true; }
+    if (e.key === 'Home') { list[0].focus(); return true; }
+    if (e.key === 'End') { list[list.length - 1].focus(); return true; }
+    if (e.key === 'Escape') { closeMenu(true); return true; }
+    if (e.key === 'Tab') { closeMenu(false); return false; }
+    return false;
+  }
+  document.getElementById('evt-tools').addEventListener('click', function (e) {
+    var mi = e.target.closest && e.target.closest('[data-mi]');
+    if (!mi || !menu || mi.disabled) return;
+    e.stopPropagation();
+    var f = menu.actions[Number(mi.getAttribute('data-mi'))];
+    if (f && api) f();
+    if (menu) fillMenu(); // stays open: the checks follow (Esc or a click outside closes it)
+  }, true);
+  document.addEventListener('mousedown', function (e) { if (menu && !menu.pop.contains(e.target) && e.target !== menu.btn) closeMenu(false); });
+  window.addEventListener('blur', function () { if (menu && document.activeElement === frame) closeMenu(false); }); // a click in the frame
+  function deleteBlock() {
+    var i = api && api.info();
+    if (!i) return;
+    if (i.structural === 'delete') { api.remove(); return; } // undo: no question
+    var n = i.inner || 0;
+    if (!window.confirm('Delete this ' + (i.block || 'block').replace(/^core\//, '') + ' (' + i.path + ')' + (n ? ' and the ' + n + ' block' + (n === 1 ? '' : 's') + ' inside it' : '') +
+      ' from the page? It is removed when you Save; evive keeps the earlier version as a revision (undo).')) return;
+    api.remove();
   }
 
   // evive #539: the pending copy of a live page. Publish / Discard changes are disabled while a Save is pending
@@ -188,7 +341,7 @@
     if (d) setDevice(d);
   });
   document.getElementById('evt-tools').addEventListener('click', function (e) {
-    var a = e.target.getAttribute && e.target.getAttribute('data-act');
+    var a = e.target.closest && e.target.closest('[data-act]') ? e.target.closest('[data-act]').getAttribute('data-act') : null; // evive #575: also a click on an icon
     if (!a || !api) return;
     if (a === 'parent') api.selectParent();
     if (a === 'smaller') api.resize(-5);
@@ -204,9 +357,17 @@
     if (a === 'toggleopen' && api.toggleOpen) api.toggleOpen(); // evive #543
     if (a === 'layout') openLayout(); // evive #549
     if (a === 'image') openImage();
+    // evive #575
+    if (a === 'menu') { if (menu && menu.btn === e.target.closest('[data-act]')) closeMenu(true); else openMenu(e.target.closest('[data-act]')); }
+    if (a === 'align') { var v = e.target.closest('[data-act]').getAttribute('data-val'), i = api.info(); api.setBasic('align', i && i.tweak && i.tweak.align === v ? null : v); }
+    if (a === 'duplicate') api.duplicate();
+    if (a === 'delete') deleteBlock();
   });
   // Keys also work while the focus is on the toolbar (not in the panel: its fields type, Esc closes it).
   document.addEventListener('keydown', function (e) {
+    if (menu && menu.pop.contains(e.target)) { if (menuKey(e)) e.preventDefault(); return; } // evive #575
+    if (menu && e.key === 'Escape') { e.preventDefault(); closeMenu(true); return; }
+    if (menu && e.key === 'ArrowDown' && e.target === menu.btn) { e.preventDefault(); var f = menu.pop.querySelector('[role^="menuitem"]:not([disabled])'); if (f) f.focus(); return; }
     if (panel.contains(e.target)) {
       if (e.key === 'Escape') { e.preventDefault(); closePanel(true); }
       return;
@@ -468,6 +629,14 @@
       busy = false;
       api.saved(ELT && j ? j.base_hash : undefined);
       say(ELT ? 'Saved in the Elementor settings of this page.' : 'Saved: evive applies it as a new revision.');
+      if (!ELT && j && j.reload) { // evive #575: a duplicate / delete shifted the block paths: read the page again
+        closeMenu(false);
+        dirty = 0; api = null; afterReady = 'Saved. The page is read again (blocks were added or removed).';
+        document.querySelectorAll('#evt-tools button').forEach(function (b) { b.disabled = true; });
+        save.textContent = 'Save'; save.disabled = true;
+        frame.src = frame.src;
+        say('Saved. Loading the page again…');
+      }
       try {
         if (window.parent !== window) window.parent.postMessage({ type: 'evive:tweak-saved', post_id: cfg.post_id, changes: changes }, new URL(cfg.endpoint).origin);
       } catch (e) { /* no evive window */ }

@@ -28,6 +28,14 @@
       if (v.width) parts.push('width ' + v.width + '%');
       if (v.top) parts.push(v.top + (v.top === 1 ? ' step' : ' steps') + ' more space at the top'); // evive #532
       if (v.bottom) parts.push(v.bottom + (v.bottom === 1 ? ' step' : ' steps') + ' more space at the bottom');
+      // evive #575: tweak basics
+      if (v.z) parts.push('layer ' + (v.z > 0 ? '+' : '') + v.z);
+      if (v.radius) parts.push('corners ' + v.radius);
+      if (v.shadow) parts.push('shadow ' + v.shadow);
+      if (v.opacity) parts.push(v.opacity + '% opacity');
+      if (v.align) parts.push('aligned ' + v.align);
+      if (v.aspect) parts.push('cropped ' + String(v.aspect).replace('-', ':'));
+      if (v.focus) parts.push('focal point ' + v.focus.x + '%, ' + v.focus.y + '%');
       if (parts.length) out.push(SIZES[s] + ': ' + parts.join(', '));
     });
     return out;

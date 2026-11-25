@@ -15,7 +15,12 @@
  * evive #549: a section's new layout (block markup from evive) is rendered by the site (POST evive/v1/tweak/render,
  * tweak token) and swapped in for the section (preview); Use keeps it as a change {path, block, replace}, Cancel / Reset
  * put the old section back. An image block gets another image at once (src, alt) as a change {path, block, image};
- * an image file dropped on an image block goes to the toolbar (tweak-shell.js uploads it). */
+ * an image file dropped on an image block goes to the toolbar (tweak-shell.js uploads it).
+ * evive #575: tweak basics: z (layer within its section), radius, shadow, opacity, align, and for images aspect (crop)
+ * + focus (focal point: Crop > Set focal point, then click the image, shown uncropped while picking); the same keys,
+ * values and CSS as Evive_Tweak (PHP) and the evive MCP (#573). Duplicate / Delete of a block are changes of their own
+ * ({path, block, before_hash, duplicate|delete: true}, hash = data-evive-hash); the frame shows the copy (not selectable)
+ * or the block as deleted until Save, and the page is read again after the Save (the paths after it shift). */
 (function () {
   'use strict';
   var cfg = window.eviveTweakFrame || {};
@@ -24,6 +29,14 @@
   };
   var SIZES = ['desktop', 'tablet', 'phone'];
   var IMAGE_BLOCKS = { 'core/image': 1, 'core/post-featured-image': 1, 'core/site-logo': 1 };
+  // evive #575: the basics' values (as Evive_Tweak::BASICS and the MCP), values that mean "none", blocks that crop.
+  var BASICS = { radius: ['none', 's', 'm', 'l', 'round'], shadow: ['none', 'soft', 'medium'], opacity: [100, 80, 60, 40], align: ['left', 'center', 'right'], aspect: ['orig', '16-9', '4-3', '1-1', '3-4'] };
+  var BASICS_DEFAULT = { opacity: 100, aspect: 'orig' };
+  var CROP_BLOCKS = { 'core/image': 1, 'core/post-featured-image': 1, 'core/cover': 1, 'core/media-text': 1 };
+  var RADIUS = { none: '0px', s: 'var(--wp--custom--radius--s, 4px)', m: 'var(--wp--custom--radius--m, 8px)', l: 'var(--wp--custom--radius--l, 16px)', round: '9999px' };
+  var SHADOW = { none: 'none', soft: 'var(--wp--preset--shadow--s, var(--wp--preset--shadow--natural, none))', medium: 'var(--wp--preset--shadow--m, var(--wp--preset--shadow--deep, none))' };
+  var structural = {}; // evive #575: path -> {op: 'duplicate'|'delete', hash, block, copy (the shown copy)}
+  var focusPick = null; // evive #575: path of the image whose focal point the next click sets
   var state = {};     // path -> {block, tweak, original, text: {before, after} | undefined (evive #533)}
   var device = 'desktop';
   var selected = null;
@@ -54,6 +67,17 @@
         var n = Math.max(0, Math.min(40, Math.round(Number(v[k]) || 0)));
         if (n) c[k] = n;
       });
+      // evive #575: the basics, as Evive_Tweak::sanitize_basics() and the MCP's tweakBasicsClean().
+      var z = Math.max(-5, Math.min(5, Math.round(Number(v.z) || 0)));
+      if (z) c.z = z;
+      Object.keys(BASICS).forEach(function (k) {
+        var val = v[k];
+        if (val == null || val === '' || typeof val === 'boolean') return;
+        var hit = BASICS[k].filter(function (x) { return typeof x === 'number' ? Number(val) === x : val === x; })[0];
+        if (hit !== undefined && hit !== BASICS_DEFAULT[k]) c[k] = hit;
+      });
+      var f = v.focus, ok = function (n) { return n !== null && n !== '' && typeof n !== 'boolean' && isFinite(Number(n)) && Number(n) >= 0 && Number(n) <= 100; };
+      if (f && typeof f === 'object' && ok(f.x) && ok(f.y)) c.focus = { x: Math.round(Number(f.x)), y: Math.round(Number(f.y)) };
       if (Object.keys(c).length) out[s] = c;
     });
     return out;
@@ -128,6 +152,7 @@
       if (box.contains(e.target)) return; // handled by the pointer events of the box
       if (textBar && textBar.contains(e.target)) return; // evive #533
       if (editing && editing.el.contains(e.target)) return; // a click inside the text being edited moves the caret
+      if (focusPick && pickAt(e.clientX, e.clientY)) return; // evive #575
       clickAt(e.target, e.clientX, e.clientY);
     }, true);
     document.addEventListener('submit', function (e) { e.preventDefault(); }, true);
@@ -387,8 +412,72 @@
   }, true);
   document.addEventListener('input', function (e) { if (editing && editing.el.contains(e.target)) notify(); }, true); // live Save count
 
+  // evive #575: picking a focal point: a click on the (uncropped) image sets it; anywhere else ends picking.
+  function pickAt(x, y) {
+    var node = document.querySelector('[data-evive-path="' + focusPick.replace(/[^0-9.]/g, '') + '"]');
+    var im = focusImage(node), r = im && im.getBoundingClientRect();
+    var path = focusPick;
+    focusPick = null;
+    document.documentElement.classList.remove('evt-picking');
+    box.hidden = !selected || !!editing;
+    if (!r || x < r.left || x > r.right || y < r.top || y > r.bottom || !r.width || !r.height) { render(); notify(); return false; }
+    if (selected !== node) select(node);
+    update({ focus: { x: Math.round((x - r.left) / r.width * 100), y: Math.round((y - r.top) / r.height * 100) } });
+    var s = shell();
+    if (s && s.hint) s.hint('Focal point set.');
+    return path !== null;
+  }
+  function startPick() {
+    if (!selected || !focusImage(selected)) return;
+    focusPick = pathOf(selected);
+    document.documentElement.classList.add('evt-picking');
+    box.hidden = true; // the click reaches the image, not the selection box
+    render(); place(); notify();
+  }
+  function stopPick() {
+    if (!focusPick) return;
+    focusPick = null;
+    document.documentElement.classList.remove('evt-picking');
+    box.hidden = !selected || !!editing;
+    render(); place(); notify();
+  }
+
+  // evive #575: Duplicate / Delete on Save (a second click undoes it). The copy is shown right after the block.
+  function toggleStructural(op) {
+    if (!selected) return;
+    if (editing) stopEdit();
+    var p = pathOf(selected), x = structural[p];
+    if (x) undoStructural(p);
+    if (x && x.op === op) { place(); notify(); return; }
+    if (!structOk(p)) return;
+    x = structural[p] = { op: op, hash: selected.getAttribute('data-evive-hash'), block: state[p].block };
+    if (op === 'duplicate') {
+      var copy = selected.cloneNode(true);
+      [copy].concat(Array.prototype.slice.call(copy.querySelectorAll('[data-evive-path]'))).forEach(function (n) {
+        ['data-evive-path', 'data-evive-block', 'data-evive-tweak', 'data-evive-text', 'data-evive-hash', 'data-evive-space', 'contenteditable'].forEach(function (a) { n.removeAttribute(a); });
+        n.classList.remove('evt-selected', 'evt-hover', 'evt-text', 'evt-editing');
+      });
+      copy.classList.add('evt-copy');
+      copy.setAttribute('aria-label', 'Copy of block ' + p + ' (added on Save)');
+      selected.after(copy);
+      x.copy = copy;
+    } else {
+      selected.classList.add('evt-deleted');
+    }
+    place(); notify();
+  }
+  function undoStructural(p) {
+    var x = structural[p];
+    if (!x) return;
+    if (x.copy) x.copy.remove();
+    var n = document.querySelector('[data-evive-path="' + p.replace(/[^0-9.]/g, '') + '"]');
+    if (n) n.classList.remove('evt-deleted');
+    delete structural[p];
+  }
+
   function select(node) {
     if (editing && node !== editing.node) stopEdit(); // evive #533
+    if (focusPick && node && pathOf(node) !== focusPick) stopPick(); // evive #575
     if (selected) selected.classList.remove('evt-selected');
     selected = node || null;
     if (selected) {
@@ -486,12 +575,67 @@
       }
       if (t.width) r.push('width:' + t.width + '%', 'max-width:' + t.width + '%', 'box-sizing:border-box');
       if (!t.hidden) r = r.concat(spaceRules(t, st.base || {})); // evive #532
-      if (!r.length) return;
-      out += '@media ' + MEDIA[s] + '{' + sel + '{' + r.join(';') + '}';
+      var b = basicRules(focusPick === path ? Object.assign({}, t, { aspect: undefined }) : t, mediaKind(st.block)); // evive #575
+      r = r.concat(b.own);
+      if (!r.length && !b.subs.length) return;
+      out += '@media ' + MEDIA[s] + '{' + (r.length ? sel + '{' + r.join(';') + '}' : '');
+      b.subs.forEach(function (x) { out += sel + x[0] + '{' + x[1].join(';') + '}'; });
       if (t.width && IMAGE_BLOCKS[st.block]) out += sel + ' img{width:100% !important;height:auto !important}';
       out += '}';
     });
+    // evive #575: a layer stays within its section (the top-level block): that gets a stacking context of its own.
+    var top = path.split('.')[0];
+    if (top !== path && SIZES.some(function (s) { return st.tweak[s] && st.tweak[s].z && !st.tweak[s].hidden; })) {
+      out += '[data-evive-path="' + top.replace(/[^0-9]/g, '') + '"]{isolation:isolate}';
+    }
     return out;
+  }
+
+  // evive #575: same as Evive_Tweak::media_kind() and basics_rules() in PHP. Returns {own: [rules], subs: [[sel, rules]]}.
+  function mediaKind(block) {
+    if (IMAGE_BLOCKS[block]) return 'image';
+    if (block === 'core/cover') return 'cover';
+    if (block === 'core/media-text') return 'media-text';
+    return '';
+  }
+  function basicRules(t, kind) {
+    var own = [], subs = {}, order = [];
+    function add(sel, rule) { if (!subs[sel]) { subs[sel] = []; order.push(sel); } subs[sel].push(rule); }
+    if (t.hidden) return { own: own, subs: [] };
+    if (t.z) own.push('position:relative', 'z-index:' + t.z);
+    if (t.opacity) own.push('opacity:' + (t.opacity / 100));
+    if (t.align) {
+      var m = { left: ['0', 'auto'], center: ['auto', 'auto'], right: ['auto', '0'] }[t.align];
+      if (m) own.push('margin-left:' + m[0] + ' !important', 'margin-right:' + m[1] + ' !important');
+    }
+    var img = kind === 'image' ? ' img' : kind === 'media-text' ? ' .wp-block-media-text__media img' : '';
+    if (t.radius && RADIUS[t.radius]) {
+      if (img) add(img, 'border-radius:' + RADIUS[t.radius] + ' !important');
+      else { own.push('border-radius:' + RADIUS[t.radius] + ' !important'); if (kind === 'cover') own.push('overflow:hidden'); }
+    }
+    if (t.shadow && SHADOW[t.shadow]) {
+      if (img) add(img, 'box-shadow:' + SHADOW[t.shadow] + ' !important');
+      else own.push('box-shadow:' + SHADOW[t.shadow] + ' !important');
+    }
+    var ratio = t.aspect ? String(t.aspect).replace('-', '/') : '';
+    var pos = t.focus ? 'object-position:' + t.focus.x + '% ' + t.focus.y + '% !important' : '';
+    if (kind === 'cover') {
+      if (ratio) own.push('aspect-ratio:' + ratio + ' !important', 'min-height:0 !important');
+      if (pos) add(' .wp-block-cover__image-background', pos);
+    } else if (img) {
+      if (ratio) { add(img, 'aspect-ratio:' + ratio + ' !important'); add(img, 'height:auto !important'); add(img, 'object-fit:cover !important'); }
+      if (pos) add(img, pos);
+    }
+    return { own: own, subs: order.map(function (k) { return [k, subs[k]]; }) };
+  }
+  // evive #575: the image whose focal point is picked (the cover's background, the media-text's media).
+  function focusImage(node) {
+    if (!node) return null;
+    var k = mediaKind(node.getAttribute('data-evive-block') || '');
+    if (k === 'cover') return node.querySelector('.wp-block-cover__image-background');
+    if (k === 'media-text') return node.querySelector('.wp-block-media-text__media img');
+    if (k === 'image') return node.querySelector('img');
+    return null;
   }
 
   function render() {
@@ -509,6 +653,12 @@
     Object.keys(state).forEach(function (p) {
       var im = state[p].image;
       if (im) out.push({ path: p, block: 'core/image', image: { id: im.id, url: im.url, alt: im.alt } });
+    });
+    // evive #575: duplicates and deletes, each a change of its own (the app sends them last, from the end of the page).
+    Object.keys(structural).forEach(function (p) {
+      var x = structural[p], c = { path: p, block: x.block, before_hash: x.hash };
+      c[x.op] = true;
+      out.push(c);
     });
     return out.concat(Object.keys(state).filter(function (p) {
       return JSON.stringify(state[p].tweak) !== state[p].original || textChanged(state[p]);
@@ -529,7 +679,7 @@
       if (textChanged(state[p])) n++;
       if (state[p].image) n++; // evive #549
     });
-    return n;
+    return n + Object.keys(structural).length; // evive #575
   }
 
   function info() {
@@ -546,8 +696,21 @@
       top: p.indexOf('.') < 0, section_path: p.split('.')[0], sectionDirty: sectionDirty(p.split('.')[0]),
       layout: layoutStatus(p.split('.')[0]),
       image: imageOf(selected) ? { src: imageOf(selected).currentSrc || imageOf(selected).src, alt: st.image ? st.image.alt : imageOf(selected).getAttribute('alt') || '', id: st.image ? st.image.id : null } : null,
-      imageChanged: !!st.image
+      imageChanged: !!st.image,
+      // evive #575: the basics
+      crop: !!CROP_BLOCKS[st.block] && !!focusImage(selected), picking: focusPick === p,
+      narrow: !!(st.tweak[device] && st.tweak[device].align) || selected.getBoundingClientRect().width < parentWidth(selected) - 2,
+      structural: structural[p] ? structural[p].op : null, inner: selected.querySelectorAll('[data-evive-path]').length,
+      canStructural: structOk(p)
     };
+  }
+  // evive #575: a duplicate / delete needs the block's hash; the app refuses it in a section with a new layout or image.
+  function structOk(p) {
+    var n = document.querySelector('[data-evive-path="' + p.replace(/[^0-9.]/g, '') + '"]');
+    if (!n || !/^[0-9a-f]{64}$/.test(n.getAttribute('data-evive-hash') || '')) return false;
+    var top = p.split('.')[0];
+    if (layouts[top]) return false;
+    return !subtree(top).some(function (k) { return !!state[k].image; });
   }
 
   function notify() {
@@ -771,6 +934,7 @@
       if (!selected) return;
       if (editing) stopEdit();
       var st = state[pathOf(selected)];
+      if (structural[pathOf(selected)]) { undoStructural(pathOf(selected)); place(); notify(); return; } // evive #575: its own step
       if (st.image) { resetImage(st, selected); place(); notify(); return; } // evive #549: the image first
       // evive #533: a text edit is undone first (its own step); the next Reset undoes the tweak of this size.
       if (textChanged(st)) {
@@ -788,6 +952,28 @@
       st.tweak = clean(t);
       render(); place(); notify(); // evive #532: the box follows at once
     },
+    // evive #575: the basics. key: z, radius, shadow, opacity, align, aspect, focus; value null removes it. all: every
+    // screen size (corners, shadow, opacity), else this one.
+    setBasic: function (key, value, all) {
+      if (!selected || !BASICS[key] && key !== 'z' && key !== 'focus') return;
+      var st = state[pathOf(selected)], t = JSON.parse(JSON.stringify(st.tweak));
+      (all ? SIZES : [device]).forEach(function (s) {
+        t[s] = Object.assign({}, t[s] || {});
+        t[s][key] = value;
+      });
+      st.tweak = clean(t);
+      render(); place(); notify();
+    },
+    // front (5), back (-5), up (+1), down (-1), normal (none)
+    layer: function (op) {
+      var t = cur(); if (!t) return;
+      var z = t.z || 0;
+      z = op === 'front' ? 5 : op === 'back' ? -5 : op === 'up' ? z + 1 : op === 'down' ? z - 1 : 0;
+      api.setBasic('z', Math.max(-5, Math.min(5, z)) || null);
+    },
+    pickFocus: function () { if (focusPick) stopPick(); else startPick(); },
+    duplicate: function () { toggleStructural('duplicate'); },
+    remove: function () { toggleStructural('delete'); },
     // evive #549
     previewLayout: previewLayout,
     useLayout: useLayout,
@@ -817,6 +1003,7 @@
         if (state[p].image) { delete state[p].image; state[p].imgShown = null; } // evive #549: the saved image stays
       });
       Object.keys(layouts).forEach(function (p) { if (layouts[p].used && !layouts[p].preview) delete layouts[p]; }); // evive #549
+      structural = {}; // evive #575: the shell reads the page again after a duplicate / delete
       notify();
     },
     key: function (e) {
@@ -825,7 +1012,7 @@
       if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) && e.target.ownerDocument === document) return false;
       var step = e.shiftKey ? 5 : 1;
       switch (e.key) {
-        case 'Escape': if (!selected) return false; api.deselect(); return true;
+        case 'Escape': if (focusPick) { stopPick(); return true; } if (!selected) return false; api.deselect(); return true; // evive #575
         case 'Enter': // evive #533: Enter (in the page) or F2 edits the text of the selected block
           if (!e.target || e.target.ownerDocument !== document) return false;
           /* falls through */
