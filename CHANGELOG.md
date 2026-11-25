@@ -14,7 +14,7 @@ Add your change under "## Unreleased" at the top; the release gate turns it into
   the shape) with object-fit cover; the focal point is the nearest of Elementor's nine positions. Delete asks for a
   confirm and has no undo in evive after Save. Everything shows live in the frame; after a Save with a duplicate or
   delete, or one that was only partly saved, the page is read again. Global widgets and header / footer templates stay
-  not selectable.
+  not selectable. An element sent behind the page (negative layer) can still be clicked and selected in the frame.
 - `GET /evive/v1/tweak/elementor` also gives these values per device and `basics` (which of them Elementor has for each
   element).
 
