@@ -2,7 +2,7 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
-## Unreleased
+## 1.8.2 — 2026-11-25
 
 - Tweak basics on Elementor pages (evive #578, with the evive MCP #576 and app #577): the toolbar of #575 (**Layer**,
   **Style**, **Align**, **Crop** + focal point, **Duplicate** / **Delete**) now also works in the Elementor tweak frame, and
