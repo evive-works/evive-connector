@@ -168,3 +168,19 @@ msgstr "taal"
 msgctxt "block keyword"
 msgid "translation"
 msgstr "vertaling"
+
+#: language/class-rest.php
+msgid "That site is not one of the languages of this network."
+msgstr "Die site is geen van de talen van dit netwerk."
+
+#: language/class-rest.php
+msgid "Linking to another language site needs edit rights on that site, or an administrator of this site."
+msgstr "Koppelen aan een andere taalsite vraagt bewerkrechten op die site, of een beheerder van deze site."
+
+#: language/language.php
+msgid "evive-language is now part of the evive Connector; you can deactivate it."
+msgstr "evive-language zit nu in de evive Connector; je kunt de plugin uitschakelen."
+
+#: language/language.php
+msgid "Plugins"
+msgstr "Plugins"

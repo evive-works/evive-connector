@@ -2,6 +2,27 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
+## Unreleased
+
+- Multisite languages (evive #510): the evive-language plugin (0.1.1) is now part of the Connector, in `language/`.
+  Translation links between the sites of a Multisite network (one site per language), hreflang tags, the language
+  switcher block `evive-language/switcher` (same name, so evive-base's header pattern keeps working), the editor panel
+  "Translations", Settings → Language and Network Admin → Settings → Languages (Multisite only) and
+  `wp evive-language audit|link|unlink`. Same data as the plugin (post meta `_evive_translations`, options
+  `evive_language` and `evive_language_x_default`), so existing links stay. REST: the old paths
+  `evive-language/v1/search` and `evive-language/v1/link` (GET/POST/DELETE, same request and answer, so evive's MCP
+  works unchanged) and the same routes under `evive/v1/language/`.
+- Linking a translation no longer gives 403 for the per-site evive user (evive #510). Cause: on a language network
+  evive has one login per site, an administrator of that site only, and evive-language checked `edit_post` on the
+  target post on the other site, where that user has no role. Now `search` and `POST link` also allow an administrator
+  of this site (`manage_options`) when the other site takes part in language switching; edit rights on the other site
+  work as before. Linking writes only the translation map of the target post there (the target must exist, be of the
+  same type and not be in the trash). Without edit rights on the other site its private posts are left out of search
+  and cannot be linked. Errors now say why (`evive_language_not_participating`, `evive_language_forbidden`).
+- While the evive-language plugin is still active it keeps its own routes, block and hreflang; the Connector then only
+  adds `evive/v1/language/*` and shows the admin notice "evive-language is now part of the evive Connector; you can
+  deactivate it" to whoever can deactivate it. Dutch translations included. The switcher block needs WordPress 6.1+.
+
 ## 1.5.4 — 2026-11-24
 
 - Tweak mode: change a section's layout and replace images (evive #549, with the evive app #548 and MCP #547).

@@ -40,7 +40,7 @@ final class Rest {
 		register_rest_route( $ns, $base . '/search', [
 			'methods'             => \WP_REST_Server::READABLE,
 			'callback'            => [ __CLASS__, 'search' ],
-			'permission_callback' => static fn( \WP_REST_Request $r ) => self::can_on_blog( (int) $r['blog'], 'edit_posts' ),
+			'permission_callback' => static fn( \WP_REST_Request $r ) => self::may_reach_blog( (int) $r['blog'], 'edit_posts' ), // evive #510
 			'args'                => [
 				'blog' => $int,
 				'type' => [ 'type' => 'string', 'default' => 'page', 'enum' => Plugin::post_types() ],
@@ -58,8 +58,10 @@ final class Rest {
 			[
 				'methods'             => \WP_REST_Server::CREATABLE,
 				'callback'            => [ __CLASS__, 'create_link' ],
+				// evive #510: was edit_post on the target post itself, which a per-site evive user never has (403).
 				'permission_callback' => static fn( \WP_REST_Request $r ) => current_user_can( 'edit_post', (int) $r['post_id'] )
-					&& self::can_on_blog( (int) $r['target_blog'], 'edit_post', (int) $r['target_post'] ),
+					? self::may_reach_blog( (int) $r['target_blog'], 'edit_post', (int) $r['target_post'] )
+					: false,
 				'args'                => [ 'post_id' => $int, 'target_blog' => $int, 'target_post' => $int ],
 			],
 			[
@@ -69,6 +71,29 @@ final class Rest {
 				'args'                => [ 'post_id' => $int, 'target_blog' => $int ],
 			],
 		] );
+	}
+
+	/**
+	 * evive #510: may the current user search or link posts on another site of the network?
+	 *  - that site takes part in language switching (Settings → Language on that site; its own administrator decides), and
+	 *  - the user can edit there (as in evive-language 0.1.1), or is an administrator of THIS site.
+	 * Why the second: on a language network evive has one login per site, an administrator of that site only (not a
+	 * member of the other sites, so every check on the other site failed with 403). Linking writes nothing on the other
+	 * site but the translation map (post meta `_evive_translations`) of the target post, and of a post there that loses
+	 * its place in the group; the target must exist, be of the same post type and not be in the trash (create_link).
+	 * No content, status, slug or other meta of the other site changes, and an unlink undoes it. Search then leaves out
+	 * private posts (see search()). The site's own administrator could already change every link on this site.
+	 *
+	 * @return true|\WP_Error
+	 */
+	private static function may_reach_blog( int $blog_id, string $cap, ?int $object_id = null ) {
+		if ( ! Sites::is_participating( $blog_id ) ) {
+			return new \WP_Error( 'evive_language_not_participating', __( 'That site is not one of the languages of this network.', 'evive-language' ), [ 'status' => 403 ] );
+		}
+		if ( self::can_on_blog( $blog_id, $cap, $object_id ) || current_user_can( 'manage_options' ) ) {
+			return true;
+		}
+		return new \WP_Error( 'evive_language_forbidden', __( 'Linking to another language site needs edit rights on that site, or an administrator of this site.', 'evive-language' ), [ 'status' => 403 ] );
 	}
 
 	/** Capability check on another site of the network (only sites that take part). */
@@ -84,10 +109,15 @@ final class Rest {
 	public static function search( \WP_REST_Request $r ) {
 		$type = (string) $r['type'];
 		$s    = (string) $r['s'];
-		return Sites::on_blog( (int) $r['blog'], static function () use ( $type, $s ) {
+		// evive #510: a user without edit rights on that site (an administrator of this site only) doesn't see its private posts.
+		$statuses = [ 'publish', 'draft', 'pending', 'future' ];
+		if ( self::can_on_blog( (int) $r['blog'], 'edit_posts' ) ) {
+			$statuses[] = 'private';
+		}
+		return Sites::on_blog( (int) $r['blog'], static function () use ( $type, $s, $statuses ) {
 			$query = new \WP_Query( [
 				'post_type'      => $type,
-				'post_status'    => [ 'publish', 'draft', 'pending', 'future', 'private' ],
+				'post_status'    => $statuses,
 				's'              => $s,
 				'posts_per_page' => 20,
 				'orderby'        => '' === $s ? 'title' : 'relevance',
@@ -121,6 +151,11 @@ final class Rest {
 			$target = get_post( $target_post );
 			return ( $target && 'trash' !== $target->post_status ) ? $target->post_type : null;
 		} );
+		// evive #510: as in search(), a private post there only for a user who can edit it.
+		$target_private = 'private' === Sites::on_blog( $target_blog, static fn() => get_post_status( $target_post ) );
+		if ( $target_private && ! self::can_on_blog( $target_blog, 'edit_post', $target_post ) ) {
+			$target_type = null;
+		}
 		if ( $target_type !== $post->post_type ) {
 			return new \WP_Error( 'evive_language_type_mismatch', __( 'The translation must exist and be of the same type.', 'evive-language' ), [ 'status' => 400 ] );
 		}
