@@ -1,0 +1,27 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "evive-language/switcher",
+	"title": "Language switcher",
+	"category": "widgets",
+	"icon": "translation",
+	"description": "Links to this page in the other languages of the site.",
+	"keywords": [ "language", "translation", "hreflang" ],
+	"textdomain": "evive-language",
+	"attributes": {
+		"display": {
+			"type": "string",
+			"enum": [ "code", "label", "both" ],
+			"default": "code"
+		}
+	},
+	"supports": {
+		"html": false,
+		"color": { "text": true, "link": true, "background": true },
+		"typography": { "fontSize": true },
+		"spacing": { "margin": true, "padding": true, "blockGap": true }
+	},
+	"editorScript": "file:../../build/switcher.js",
+	"style": "file:./style.css",
+	"render": "file:./render.php"
+}

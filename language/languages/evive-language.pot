@@ -1,0 +1,167 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: evive-language 0.1.0\n"
+"Report-Msgid-Bugs-To: https://stackpros.io/\n"
+"POT-Creation-Date: 2026-10-21 21:25+0000\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Domain: evive-language\n"
+
+#: blocks/switcher/render.php includes/class-settings.php
+msgid "Language"
+msgstr ""
+
+#: includes/class-rest.php
+msgid "This post type cannot be translated."
+msgstr ""
+
+#: includes/class-rest.php
+msgid "Choose a post on another site."
+msgstr ""
+
+#: includes/class-rest.php
+msgid "The translation must exist and be of the same type."
+msgstr ""
+
+#: includes/class-rest.php
+msgid "(no title)"
+msgstr ""
+
+#: includes/class-settings.php
+#, php-format
+msgid "This site is in %s (Settings → General → Site Language). Leave a field empty to use the default shown."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Language switching"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "This site is one of the languages of the network"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Language code"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Short code shown in the language switcher, e.g. nl."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Label"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Name of the language in that language, e.g. Nederlands."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "hreflang code"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Language (and optional region) for search engines, e.g. nl-NL or en."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Languages"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Settings saved."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "International fallback (x-default)"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "— None —"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Search engines send visitors whose language has no site of its own to this site."
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Sites"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Site"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "Code"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "hreflang"
+msgstr ""
+
+#: includes/class-settings.php
+msgid "You are not allowed to change these settings."
+msgstr ""
+
+#: src/panel.js
+#, js-format
+msgid "Link to a page in %s"
+msgstr ""
+
+#: src/panel.js
+msgid "Searching…"
+msgstr ""
+
+#: src/panel.js
+msgid "Something went wrong."
+msgstr ""
+
+#: src/panel.js
+msgid "Translations"
+msgstr ""
+
+#: src/panel.js
+msgid "Remove link"
+msgstr ""
+
+#: src/switcher.js
+msgid "Display"
+msgstr ""
+
+#: src/switcher.js
+msgid "Show"
+msgstr ""
+
+#: src/switcher.js
+msgid "Language code (NL)"
+msgstr ""
+
+#: src/switcher.js
+msgid "Language name (Nederlands)"
+msgstr ""
+
+#: src/switcher.js
+msgid "Code and name"
+msgstr ""
+
+#: blocks/switcher/block.json
+msgctxt "block title"
+msgid "Language switcher"
+msgstr ""
+
+#: blocks/switcher/block.json
+msgctxt "block description"
+msgid "Links to this page in the other languages of the site."
+msgstr ""
+
+#: blocks/switcher/block.json
+msgctxt "block keyword"
+msgid "language"
+msgstr ""
+
+#: blocks/switcher/block.json
+msgctxt "block keyword"
+msgid "translation"
+msgstr ""

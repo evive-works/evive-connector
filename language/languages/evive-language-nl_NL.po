@@ -1,0 +1,170 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: evive-language 0.1.0\n"
+"Report-Msgid-Bugs-To: https://stackpros.io/\n"
+"POT-Creation-Date: 2026-10-21 21:25+0000\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Domain: evive-language\n"
+"PO-Revision-Date: 2026-10-21 21:25+0000\n"
+"Language: nl_NL\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: blocks/switcher/render.php includes/class-settings.php
+msgid "Language"
+msgstr "Taal"
+
+#: includes/class-rest.php
+msgid "This post type cannot be translated."
+msgstr "Dit berichttype kan niet worden vertaald."
+
+#: includes/class-rest.php
+msgid "Choose a post on another site."
+msgstr "Kies een bericht op een andere site."
+
+#: includes/class-rest.php
+msgid "The translation must exist and be of the same type."
+msgstr "De vertaling moet bestaan en van hetzelfde type zijn."
+
+#: includes/class-rest.php
+msgid "(no title)"
+msgstr "(geen titel)"
+
+#: includes/class-settings.php
+#, php-format
+msgid "This site is in %s (Settings → General → Site Language). Leave a field empty to use the default shown."
+msgstr "De taal van deze site is %s (Instellingen → Algemeen → Sitetaal). Laat een veld leeg om de getoonde standaardwaarde te gebruiken."
+
+#: includes/class-settings.php
+msgid "Language switching"
+msgstr "Taalwisseling"
+
+#: includes/class-settings.php
+msgid "This site is one of the languages of the network"
+msgstr "Deze site is een van de talen van het netwerk"
+
+#: includes/class-settings.php
+msgid "Language code"
+msgstr "Taalcode"
+
+#: includes/class-settings.php
+msgid "Short code shown in the language switcher, e.g. nl."
+msgstr "Korte code in de taalwisselaar, bijvoorbeeld nl."
+
+#: includes/class-settings.php
+msgid "Label"
+msgstr "Label"
+
+#: includes/class-settings.php
+msgid "Name of the language in that language, e.g. Nederlands."
+msgstr "Naam van de taal in die taal, bijvoorbeeld English."
+
+#: includes/class-settings.php
+msgid "hreflang code"
+msgstr "hreflang-code"
+
+#: includes/class-settings.php
+msgid "Language (and optional region) for search engines, e.g. nl-NL or en."
+msgstr "Taal (en eventueel regio) voor zoekmachines, bijvoorbeeld nl-NL of en."
+
+#: includes/class-settings.php
+msgid "Languages"
+msgstr "Talen"
+
+#: includes/class-settings.php
+msgid "Settings saved."
+msgstr "Instellingen opgeslagen."
+
+#: includes/class-settings.php
+msgid "International fallback (x-default)"
+msgstr "Internationale terugval (x-default)"
+
+#: includes/class-settings.php
+msgid "— None —"
+msgstr "— Geen —"
+
+#: includes/class-settings.php
+msgid "Search engines send visitors whose language has no site of its own to this site."
+msgstr "Zoekmachines sturen bezoekers voor wier taal geen eigen site bestaat naar deze site."
+
+#: includes/class-settings.php
+msgid "Sites"
+msgstr "Sites"
+
+#: includes/class-settings.php
+msgid "Site"
+msgstr "Site"
+
+#: includes/class-settings.php
+msgid "Code"
+msgstr "Code"
+
+#: includes/class-settings.php
+msgid "hreflang"
+msgstr "hreflang"
+
+#: includes/class-settings.php
+msgid "You are not allowed to change these settings."
+msgstr "Je mag deze instellingen niet wijzigen."
+
+#: src/panel.js
+#, js-format
+msgid "Link to a page in %s"
+msgstr "Koppelen aan een pagina in: %s"
+
+#: src/panel.js
+msgid "Searching…"
+msgstr "Zoeken…"
+
+#: src/panel.js
+msgid "Something went wrong."
+msgstr "Er ging iets mis."
+
+#: src/panel.js
+msgid "Translations"
+msgstr "Vertalingen"
+
+#: src/panel.js
+msgid "Remove link"
+msgstr "Koppeling verwijderen"
+
+#: src/switcher.js
+msgid "Display"
+msgstr "Weergave"
+
+#: src/switcher.js
+msgid "Show"
+msgstr "Toon"
+
+#: src/switcher.js
+msgid "Language code (NL)"
+msgstr "Taalcode (NL)"
+
+#: src/switcher.js
+msgid "Language name (Nederlands)"
+msgstr "Taalnaam (Nederlands)"
+
+#: src/switcher.js
+msgid "Code and name"
+msgstr "Code en naam"
+
+#: blocks/switcher/block.json
+msgctxt "block title"
+msgid "Language switcher"
+msgstr "Taalwisselaar"
+
+#: blocks/switcher/block.json
+msgctxt "block description"
+msgid "Links to this page in the other languages of the site."
+msgstr "Links naar deze pagina in de andere talen van de site."
+
+#: blocks/switcher/block.json
+msgctxt "block keyword"
+msgid "language"
+msgstr "taal"
+
+#: blocks/switcher/block.json
+msgctxt "block keyword"
+msgid "translation"
+msgstr "vertaling"
