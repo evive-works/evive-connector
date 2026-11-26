@@ -20,7 +20,12 @@
  * + focus (focal point: Crop > Set focal point, then click the image, shown uncropped while picking); the same keys,
  * values and CSS as Evive_Tweak (PHP) and the evive MCP (#573). Duplicate / Delete of a block are changes of their own
  * ({path, block, before_hash, duplicate|delete: true}, hash = data-evive-hash); the frame shows the copy (not selectable)
- * or the block as deleted until Save, and the page is read again after the Save (the paths after it shift). */
+ * or the block as deleted until Save, and the page is read again after the Save (the paths after it shift).
+ * evive #581: a block that is moved or brought to front (this screen size) and cut off by a clipping block around it
+ * (overflow hidden / clip: a cover, a group with rounded corners), up to its section: info() names that block
+ * (clippedBy) and the toolbar offers Let it stick out, which sets clip "visible" on it for this screen size (as
+ * Evive_Tweak::basics_rules(): overflow visible, the cover's layers inherit its rounded corners). Reset on that block
+ * removes it; a Reset on a block inside it removes it too when nothing inside sticks out any more. */
 (function () {
   'use strict';
   var cfg = window.eviveTweakFrame || {};
@@ -33,6 +38,8 @@
   var BASICS = { radius: ['none', 's', 'm', 'l', 'round'], shadow: ['none', 'soft', 'medium'], opacity: [100, 80, 60, 40], align: ['left', 'center', 'right'], aspect: ['orig', '16-9', '4-3', '1-1', '3-4'] };
   var BASICS_DEFAULT = { opacity: 100, aspect: 'orig' };
   var CROP_BLOCKS = { 'core/image': 1, 'core/post-featured-image': 1, 'core/cover': 1, 'core/media-text': 1 };
+  // evive #581: a cover's layers that take its rounded corners when it lets children stick out (Evive_Tweak::COVER_LAYERS).
+  var COVER_LAYERS = [' > .wp-block-cover__image-background', ' > .wp-block-cover__video-background', ' > .wp-block-cover__background', ' > .wp-block-cover__gradient-background', ' > .wp-block-cover__embed-background'];
   var RADIUS = { none: '0px', s: 'var(--wp--custom--radius--s, 4px)', m: 'var(--wp--custom--radius--m, 8px)', l: 'var(--wp--custom--radius--l, 16px)', round: '9999px' };
   var SHADOW = { none: 'none', soft: 'var(--wp--preset--shadow--s, var(--wp--preset--shadow--natural, none))', medium: 'var(--wp--preset--shadow--m, var(--wp--preset--shadow--deep, none))' };
   var structural = {}; // evive #575: path -> {op: 'duplicate'|'delete', hash, block, copy (the shown copy)}
@@ -78,6 +85,7 @@
       });
       var f = v.focus, ok = function (n) { return n !== null && n !== '' && typeof n !== 'boolean' && isFinite(Number(n)) && Number(n) >= 0 && Number(n) <= 100; };
       if (f && typeof f === 'object' && ok(f.x) && ok(f.y)) c.focus = { x: Math.round(Number(f.x)), y: Math.round(Number(f.y)) };
+      if (v.clip === 'visible') c.clip = 'visible'; // evive #581
       if (Object.keys(c).length) out[s] = c;
     });
     return out;
@@ -611,7 +619,7 @@
     var img = kind === 'image' ? ' img' : kind === 'media-text' ? ' .wp-block-media-text__media img' : '';
     if (t.radius && RADIUS[t.radius]) {
       if (img) add(img, 'border-radius:' + RADIUS[t.radius] + ' !important');
-      else { own.push('border-radius:' + RADIUS[t.radius] + ' !important'); if (kind === 'cover') own.push('overflow:hidden'); }
+      else { own.push('border-radius:' + RADIUS[t.radius] + ' !important'); if (kind === 'cover' && !t.clip) own.push('overflow:hidden'); }
     }
     if (t.shadow && SHADOW[t.shadow]) {
       if (img) add(img, 'box-shadow:' + SHADOW[t.shadow] + ' !important');
@@ -625,6 +633,10 @@
     } else if (img) {
       if (ratio) { add(img, 'aspect-ratio:' + ratio + ' !important'); add(img, 'height:auto !important'); add(img, 'object-fit:cover !important'); }
       if (pos) add(img, pos);
+    }
+    if (t.clip === 'visible') { // evive #581
+      own.push('overflow:visible !important');
+      if (kind === 'cover') COVER_LAYERS.forEach(function (l) { add(l, 'border-radius:inherit'); });
     }
     return { own: own, subs: order.map(function (k) { return [k, subs[k]]; }) };
   }
@@ -701,8 +713,82 @@
       crop: !!CROP_BLOCKS[st.block] && !!focusImage(selected), picking: focusPick === p,
       narrow: !!(st.tweak[device] && st.tweak[device].align) || selected.getBoundingClientRect().width < parentWidth(selected) - 2,
       structural: structural[p] ? structural[p].op : null, inner: selected.querySelectorAll('[data-evive-path]').length,
-      canStructural: structOk(p)
+      canStructural: structOk(p),
+      // evive #581: the block around it that cuts it off, or the one it sticks out of (clip "visible").
+      clippedBy: clipInfo(clippedBy(selected)), sticksOutOf: clipInfo(sticksOutOf(selected))
     };
+  }
+
+  // ── Let it stick out (evive #581) ──────────────────────────────────────
+
+  // The section (top-level block) a block is in: the ancestors are checked up to it.
+  function blockAncestors(node) {
+    var out = [], n = parentBlock(node);
+    while (n) { out.push(n); if ((pathOf(n) || '').indexOf('.') < 0) break; n = parentBlock(n); }
+    return out;
+  }
+  function clips(n) {
+    var cs = getComputedStyle(n);
+    return /^(hidden|clip)$/.test(cs.overflowX) || /^(hidden|clip)$/.test(cs.overflowY);
+  }
+  function outside(inner, outer) {
+    var a = inner.getBoundingClientRect(), b = outer.getBoundingClientRect();
+    return a.width > 0 && a.height > 0 && (a.left < b.left - 1 || a.top < b.top - 1 || a.right > b.right + 1 || a.bottom > b.bottom + 1);
+  }
+  // Only for a block that is moved or brought to front on this screen size (as the card asks), not for every block.
+  function tweakedHere(node) {
+    var st = state[pathOf(node)], t = st && st.tweak[device];
+    return !!t && !t.hidden && (!!t.x || !!t.y || t.z > 0);
+  }
+  function clippedBy(node) {
+    if (!node || !tweakedHere(node)) return null;
+    var list = blockAncestors(node);
+    for (var i = 0; i < list.length; i++) {
+      if (state[pathOf(list[i])] && clips(list[i]) && outside(node, list[i])) return list[i];
+    }
+    return null;
+  }
+  function sticksOutOf(node) {
+    if (!node) return null;
+    var list = blockAncestors(node);
+    for (var i = 0; i < list.length; i++) {
+      var t = state[pathOf(list[i])] && state[pathOf(list[i])].tweak[device];
+      if (t && t.clip && outside(node, list[i])) return list[i];
+    }
+    return null;
+  }
+  // "the photo block" (a cover with an image or video), "the cover block", "the card" (a group in the card style), ...
+  function clipInfo(n) {
+    if (!n) return null;
+    var b = n.getAttribute('data-evive-block') || '', name;
+    if (b === 'core/cover') name = n.querySelector(':scope > .wp-block-cover__image-background, :scope > .wp-block-cover__video-background') ? 'the photo block' : 'the cover block';
+    else if (b === 'core/group' && /(^|\s)is-style-card(\s|$)/.test(n.className)) name = 'the card';
+    else name = 'the ' + (b.replace(/^core\//, '') || 'parent') + ' block';
+    return { path: pathOf(n), block: b, name: name };
+  }
+  function setClip(node, on) {
+    var st = state[pathOf(node)], t = JSON.parse(JSON.stringify(st.tweak));
+    t[device] = Object.assign({}, t[device] || {});
+    t[device].clip = on ? 'visible' : null;
+    st.tweak = clean(t);
+  }
+  function stickOut() {
+    var n = clippedBy(selected);
+    if (!n) return;
+    setClip(n, true);
+    render(); place(); notify();
+  }
+  // After a Reset of a block: a block around it that lets children stick out on this screen size stops doing so when
+  // nothing inside it sticks out any more.
+  function unstick(node) {
+    var changed = false;
+    blockAncestors(node).forEach(function (a) {
+      var t = state[pathOf(a)] && state[pathOf(a)].tweak[device];
+      if (!t || !t.clip) return;
+      var out = Array.prototype.some.call(a.querySelectorAll('[data-evive-path]'), function (d) { return outside(d, a); });
+      if (!out) { setClip(a, false); changed = true; }
+    });
+    if (changed) render();
   }
   // evive #575: a duplicate / delete needs the block's hash; the app refuses it in a section with a new layout or image.
   function structOk(p) {
@@ -950,7 +1036,9 @@
       var t = JSON.parse(JSON.stringify(st.tweak));
       delete t[device];
       st.tweak = clean(t);
-      render(); place(); notify(); // evive #532: the box follows at once
+      render();
+      unstick(selected); // evive #581
+      place(); notify(); // evive #532: the box follows at once
     },
     // evive #575: the basics. key: z, radius, shadow, opacity, align, aspect, focus; value null removes it. all: every
     // screen size (corners, shadow, opacity), else this one.
@@ -973,6 +1061,7 @@
     },
     pickFocus: function () { if (focusPick) stopPick(); else startPick(); },
     duplicate: function () { toggleStructural('duplicate'); },
+    stickOut: stickOut, // evive #581
     remove: function () { toggleStructural('delete'); },
     // evive #549
     previewLayout: previewLayout,

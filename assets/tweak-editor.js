@@ -36,6 +36,7 @@
       if (v.align) parts.push('aligned ' + v.align);
       if (v.aspect) parts.push('cropped ' + String(v.aspect).replace('-', ':'));
       if (v.focus) parts.push('focal point ' + v.focus.x + '%, ' + v.focus.y + '%');
+      if (v.clip) parts.push('lets blocks stick out'); // evive #581
       if (parts.length) out.push(SIZES[s] + ': ' + parts.join(', '));
     });
     return out;

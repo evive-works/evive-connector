@@ -2,6 +2,15 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
+## Unreleased
+
+- Let it stick out in tweak mode (evive #581, with the evive MCP #583): a block that is moved or brought to front and is
+  cut off by a block around it (overflow hidden / clip, such as a Cover or a Group with rounded corners, up to its
+  section) says so in the toolbar ("cut off by the photo block") and gets **Let it stick out**. That sets the new
+  eviveTweak key `clip: "visible"` on that block for this screen size; it is rendered with `overflow: visible`, and a
+  cover's image, video and dim layer get `border-radius: inherit`, so its rounded corners stay. Reset on that block
+  removes it; a Reset on the moved block removes it too when nothing inside sticks out any more.
+
 ## 1.8.2 — 2026-11-25
 
 - Tweak basics on Elementor pages (evive #578, with the evive MCP #576 and app #577): the toolbar of #575 (**Layer**,

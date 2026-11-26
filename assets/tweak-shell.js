@@ -19,7 +19,9 @@
  * Corners in the Style menu go to desktop (tablet and mobile follow it), shadow and opacity are one value for all devices
  * (opacity only for images), Align for elements Elementor can align, Crop for image widgets (the shape becomes a height,
  * the focal point one of Elementor's nine positions), Delete has no undo after Save. A Save with a duplicate or delete
- * (reload: true) or a partly saved one reads the page again. */
+ * (reload: true) or a partly saved one reads the page again.
+ * evive #581: a block moved or brought to front that a block around it cuts off (a cover, a rounded group) says so in
+ * the status ("cut off by the photo block") and gets Let it stick out (clip "visible" on that block, this screen size). */
 (function () {
   'use strict';
   var cfg = window.eviveTweakConfig || {};
@@ -88,6 +90,9 @@
     if (t.focus) parts.push('focal point ' + t.focus.x + '%, ' + t.focus.y + '%');
     if (i.picking) parts.push('click the image to set its focal point (Esc cancels)');
     if (i.structural) parts.push(i.structural === 'delete' ? 'deleted on Save' : 'duplicated on Save');
+    if (t.clip) parts.push('lets blocks stick out'); // evive #581
+    if (i.clippedBy) parts.push('cut off by ' + i.clippedBy.name);
+    else if (i.sticksOutOf) parts.push('sticks out of ' + i.sticksOutOf.name);
     return (i.block || 'block').replace(/^core\//, '') + ' (' + i.path + ') on ' + NAMES[i.device] + ': ' +
       (parts.length ? parts.join(', ') : 'not tweaked');
   }
@@ -171,6 +176,12 @@
       ['left', 'center', 'right'].forEach(function (v) { btn('align', v).title = info && !info.narrow ? 'Elementor can align headings, images, text editors and icons, and elements inside a flex container' : 'Align ' + v + ' (this device)'; });
     }
     if (menu) { if (off || menu.btn.disabled) closeMenu(false); else fillMenu(); }
+    var so = btn('stickout'); // evive #581: only when a block around it cuts it off
+    if (so) {
+      so.hidden = !(info && info.clippedBy);
+      so.disabled = off || !(info && info.clippedBy);
+      so.title = info && info.clippedBy ? 'Let this block stick out of ' + info.clippedBy.name + ' on ' + NAMES[device] + ' (Reset on that block undoes it)' : '';
+    }
   }
 
   // The menus: {btn, pop, name}. Items: [label, action, checked (a boolean: a choice; null: an action), disabled] or a
@@ -392,6 +403,7 @@
     if (a === 'menu') { if (menu && menu.btn === e.target.closest('[data-act]')) closeMenu(true); else openMenu(e.target.closest('[data-act]')); }
     if (a === 'align') { var v = e.target.closest('[data-act]').getAttribute('data-val'), i = api.info(); api.setBasic('align', i && i.tweak && i.tweak.align === v ? null : v); }
     if (a === 'duplicate') api.duplicate();
+    if (a === 'stickout' && api.stickOut) api.stickOut(); // evive #581
     if (a === 'delete') deleteBlock();
   });
   // Keys also work while the focus is on the toolbar (not in the panel: its fields type, Esc closes it).

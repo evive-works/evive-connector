@@ -27,6 +27,9 @@ if (!defined('ABSPATH')) exit;
  *    image blocks aspect (orig|16-9|4-3|1-1|3-4: crop with object-fit cover) + focus {x, y} (0..100 %, the focal point).
  *    Duplicate / delete of a block are changes of their own ({path, block, before_hash, duplicate|delete: true}): the
  *    frame gives every block its hash (data-evive-hash, sha256 of its markup as stored, as the MCP computes it).
+ * 4. Let it stick out (evive #581, MCP #583): clip "visible" per screen size on a clipping parent (Cover, Group): it is
+ *    rendered with overflow:visible, and a cover's image, video and dim layer get border-radius:inherit, so its rounded
+ *    corners stay while a moved child (or one brought to front) can stick out of it.
  */
 class Evive_Tweak {
 
@@ -65,6 +68,8 @@ class Evive_Tweak {
     const BASICS_DEFAULT = ['opacity' => 100, 'aspect' => 'orig'];
     /** evive #575: blocks that can be cropped (aspect / focus), as the MCP allows. */
     const CROP_BLOCKS = ['core/image', 'core/post-featured-image', 'core/cover', 'core/media-text'];
+    /** evive #581: a cover's layers that take its rounded corners when it lets children stick out (clip "visible"). */
+    const COVER_LAYERS = [' > .wp-block-cover__image-background', ' > .wp-block-cover__video-background', ' > .wp-block-cover__background', ' > .wp-block-cover__gradient-background', ' > .wp-block-cover__embed-background'];
 
     public static function init() {
         add_filter('register_block_type_args', [__CLASS__, 'add_attribute'], 10, 2);
@@ -161,6 +166,7 @@ class Evive_Tweak {
             && $f['x'] >= 0 && $f['x'] <= 100 && $f['y'] >= 0 && $f['y'] <= 100) {
             $c['focus'] = ['x' => (int) round($f['x']), 'y' => (int) round($f['y'])];
         }
+        if (($t['clip'] ?? null) === 'visible') $c['clip'] = 'visible'; // evive #581: only this value (MCP #583)
         return $c;
     }
 
@@ -205,7 +211,7 @@ class Evive_Tweak {
         $img = $kind === 'image' ? ' img' : ($kind === 'media-text' ? ' .wp-block-media-text__media img' : '');
         if (isset($t['radius']) && ($r = self::radius_css($t['radius'])) !== '') {
             if ($img !== '') $add($img, 'border-radius:' . $r . ' !important');
-            else { $own[] = 'border-radius:' . $r . ' !important'; if ($kind === 'cover') $own[] = 'overflow:hidden'; }
+            else { $own[] = 'border-radius:' . $r . ' !important'; if ($kind === 'cover' && empty($t['clip'])) $own[] = 'overflow:hidden'; }
         }
         if (isset($t['shadow']) && ($sh = self::shadow_css($t['shadow'])) !== '') {
             if ($img !== '') $add($img, 'box-shadow:' . $sh . ' !important');
@@ -223,6 +229,12 @@ class Evive_Tweak {
                 $add($img, 'object-fit:cover !important');
             }
             if ($pos !== '') $add($img, $pos);
+        }
+        if (isset($t['clip']) && $t['clip'] === 'visible') { // evive #581: let children stick out, keep the rounded corners
+            $own[] = 'overflow:visible !important';
+            if ($kind === 'cover') {
+                foreach (self::COVER_LAYERS as $layer) $add($layer, 'border-radius:inherit');
+            }
         }
         return [$own, $sub];
     }
@@ -883,6 +895,7 @@ class Evive_Tweak {
     <button type="button" data-act="hidephone" aria-pressed="false" title="Hide this block on phones">Hide on phone</button>
 <?php // evive #575: tweak basics (menus are filled by tweak-shell.js); evive #578: on Elementor pages too ?>
     <span class="evt-menu"><button type="button" data-act="menu" data-menu="layer" aria-haspopup="menu" aria-expanded="false" title="Bring this block to the front or send it to the back, within its section (this screen size)">Layer</button></span>
+    <button type="button" data-act="stickout" hidden>Let it stick out</button><?php // evive #581: shown when a block around it cuts it off ?>
     <span class="evt-menu"><button type="button" data-act="menu" data-menu="style" aria-haspopup="menu" aria-expanded="false" title="Corners, shadow and opacity (all screen sizes)">Style</button></span>
     <span class="evt-seg" role="group" aria-label="Align in its container (this screen size)">
       <button type="button" data-act="align" data-val="left" aria-pressed="false" aria-label="Align left" title="Align left in its container (a narrower block)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M2 2v12M5 5h8v6H5z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
