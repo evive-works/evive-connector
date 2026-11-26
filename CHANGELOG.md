@@ -2,7 +2,7 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
-## Unreleased
+## 1.8.3 — 2026-11-26
 
 - Let it stick out in tweak mode (evive #581, with the evive MCP #583): a block that is moved or brought to front and is
   cut off by a block around it (overflow hidden / clip, such as a Cover or a Group with rounded corners, up to its
