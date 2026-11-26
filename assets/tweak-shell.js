@@ -91,8 +91,9 @@
     if (i.picking) parts.push('click the image to set its focal point (Esc cancels)');
     if (i.structural) parts.push(i.structural === 'delete' ? 'deleted on Save' : 'duplicated on Save');
     if (t.clip) parts.push('lets blocks stick out'); // evive #581
-    if (i.clippedBy) parts.push('cut off by ' + i.clippedBy.name);
-    else if (i.sticksOutOf) parts.push('sticks out of ' + i.sticksOutOf.name);
+    // evive #581: first, so it stays readable on a phone (the status line is cut off at the end)
+    if (i.clippedBy) parts.unshift('cut off by ' + i.clippedBy.name);
+    else if (i.sticksOutOf) parts.unshift('sticks out of ' + i.sticksOutOf.name);
     return (i.block || 'block').replace(/^core\//, '') + ' (' + i.path + ') on ' + NAMES[i.device] + ': ' +
       (parts.length ? parts.join(', ') : 'not tweaked');
   }
