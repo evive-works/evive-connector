@@ -6,7 +6,7 @@ if (!defined('ABSPATH')) exit;
  *
  * 1. Block support attribute `eviveTweak` on every block:
  *      {"desktop"|"tablet"|"phone": {"x": int, "y": int, "width": int, "hidden": bool}}
- *    x / y: move in steps of --evive-tweak-step (the theme's spacing preset 20), -40..40.
+ *    x / y: move in steps of --evive-tweak-step (the theme's spacing preset 20), -200..200 (evive #582, was -40..40).
  *    width: % of the parent, 10..100 in steps of 5 (images keep their proportions).
  *    hidden: not shown on that screen size.
  *    top / bottom (evive #532): extra space at the top / bottom of a section, in steps of --evive-tweak-step, 0..40.
@@ -30,6 +30,12 @@ if (!defined('ABSPATH')) exit;
  * 4. Let it stick out (evive #581, MCP #583): clip "visible" per screen size on a clipping parent (Cover, Group): it is
  *    rendered with overflow:visible, and a cover's image, video and dim layer get border-radius:inherit, so its rounded
  *    corners stay while a moved child (or one brought to front) can stick out of it.
+ * 5. One block's size only (evive #582, MCP #583/#586): a block with a width (not a column of Columns) also gets
+ *    flex-shrink:0 and flex-basis:auto, so in a flex row (Group row, Buttons) its siblings keep their size and the row
+ *    may stick out instead; elsewhere these do nothing. overlay true per screen size takes the block out of the layout
+ *    (position:absolute at its own spot; its parent becomes its containing block with a zero-specificity
+ *    position:relative), so its size never moves or grows anything else; the tweak frame keeps it where it was by
+ *    adding the difference to x / y.
  */
 class Evive_Tweak {
 
@@ -121,7 +127,7 @@ class Evive_Tweak {
             $c = [];
             foreach (['x', 'y'] as $k) {
                 if (isset($t[$k]) && is_numeric($t[$k])) {
-                    $v = max(-40, min(40, (int) round($t[$k])));
+                    $v = max(-200, min(200, (int) round($t[$k]))); // evive #582 (MCP #586): was -40..40
                     if ($v !== 0) $c[$k] = $v;
                 }
             }
@@ -167,6 +173,7 @@ class Evive_Tweak {
             $c['focus'] = ['x' => (int) round($f['x']), 'y' => (int) round($f['y'])];
         }
         if (($t['clip'] ?? null) === 'visible') $c['clip'] = 'visible'; // evive #581: only this value (MCP #583)
+        if (($t['overlay'] ?? null) === true) $c['overlay'] = true; // evive #582: only true (MCP #583)
         return $c;
     }
 
@@ -199,8 +206,9 @@ class Evive_Tweak {
         $own = [];
         $sub = [];
         $add = function ($sel, $rule) use (&$sub) { $sub[$sel][] = $rule; };
+        if (!empty($t['overlay'])) $own[] = 'position:absolute'; // evive #582: out of the layout, at its own spot
         if (!empty($t['z'])) {
-            $own[] = 'position:relative';
+            if (empty($t['overlay'])) $own[] = 'position:relative';
             $own[] = 'z-index:' . (int) $t['z'];
         }
         if (isset($t['opacity'])) $own[] = 'opacity:' . ((int) $t['opacity'] / 100);
@@ -343,7 +351,11 @@ class Evive_Tweak {
      * The scoped CSS for one tweak on class $cls. $is_image: also scale the <img> inside. $base: see space_base().
      * evive #575: $kind: see media_kind() (crop, corners and shadow of the image inside).
      */
-    public static function css($cls, array $tweak, $is_image, array $base = [], $kind = null) {
+    /**
+     * evive #582: $flex: a block with a width also gets flex-shrink:0 / flex-basis:auto (false for a column of Columns,
+     * whose width is its flex-basis).
+     */
+    public static function css($cls, array $tweak, $is_image, array $base = [], $kind = null, $flex = true) {
         if ($kind === null) $kind = $is_image ? 'image' : '';
         $sel   = '.' . $cls . '.' . $cls; // two classes: wins over layout styles without !important
         $media = self::media();
@@ -363,6 +375,10 @@ class Evive_Tweak {
                     $rules[] = sprintf('width:%d%%', (int) $t['width']);
                     $rules[] = sprintf('max-width:%d%%', (int) $t['width']);
                     $rules[] = 'box-sizing:border-box';
+                    if ($flex) { // evive #582: in a flex row only this block changes, its siblings keep their size
+                        $rules[] = 'flex-shrink:0';
+                        $rules[] = 'flex-basis:auto';
+                    }
                 }
                 $rules = array_merge($rules, self::space_rules($t, $base)); // evive #532
             }
@@ -374,6 +390,11 @@ class Evive_Tweak {
             if (!$rules && !$sub) continue;
             $css .= '@media ' . $media[$size] . '{' . ($rules ? $sel . '{' . implode(';', $rules) . '}' : '');
             foreach ($sub as $s => $r) $css .= $sel . $s . '{' . implode(';', $r) . '}';
+            if (!empty($t['overlay']) && empty($t['hidden'])) {
+                // evive #582: the parent is the overlay's containing block (width % and spot as in the layout). Zero
+                // specificity: a parent that is already positioned (relative, sticky, absolute) keeps its own.
+                $css .= ':where(:has(> ' . $sel . ')){position:relative}';
+            }
             if ($is_image && !empty($t['width']) && empty($t['hidden'])) {
                 // Images keep their proportions: the image fills the new width, its height follows.
                 $css .= $sel . ' img{width:100% !important;height:auto !important}';
@@ -429,10 +450,11 @@ class Evive_Tweak {
             // evive #532: the class also depends on the block's own padding when there is extra space.
             // evive #575: and on the kind of media block (crop, corners and shadow go on its image).
             $kind      = self::media_kind($block['blockName'] ?? '');
-            $add_class = 'evive-tw-' . substr(md5($json . ($base ? wp_json_encode($base) : '') . $kind), 0, 10);
+            $flex      = ($block['blockName'] ?? '') !== 'core/column'; // evive #582: a column's width is its flex-basis
+            $add_class = 'evive-tw-' . substr(md5($json . ($base ? wp_json_encode($base) : '') . $kind . ($flex ? '' : '|col')), 0, 10);
             $is_image  = $kind === 'image';
             if (!isset(self::$printed[$add_class]) && !isset(self::$pending[$add_class])) {
-                self::$pending[$add_class] = self::css($add_class, $tweak, $is_image, $base, $kind);
+                self::$pending[$add_class] = self::css($add_class, $tweak, $is_image, $base, $kind, $flex);
             }
             if (self::$frame) $set['data-evive-tweak'] = $json;
         }
@@ -896,6 +918,7 @@ class Evive_Tweak {
 <?php // evive #575: tweak basics (menus are filled by tweak-shell.js); evive #578: on Elementor pages too ?>
     <span class="evt-menu"><button type="button" data-act="menu" data-menu="layer" aria-haspopup="menu" aria-expanded="false" title="Bring this block to the front or send it to the back, within its section (this screen size)">Layer</button></span>
     <button type="button" data-act="stickout" hidden>Let it stick out</button><?php // evive #581: shown when a block around it cuts it off ?>
+    <button type="button" data-act="overlay" aria-pressed="false"<?php echo $elementor ? ' hidden' : ''; // evive #582: block pages only ?> title="Overlay: take this block out of the layout, where it is now, so its size never moves or grows anything else (this screen size)">Overlay</button>
     <span class="evt-menu"><button type="button" data-act="menu" data-menu="style" aria-haspopup="menu" aria-expanded="false" title="Corners, shadow and opacity (all screen sizes)">Style</button></span>
     <span class="evt-seg" role="group" aria-label="Align in its container (this screen size)">
       <button type="button" data-act="align" data-val="left" aria-pressed="false" aria-label="Align left" title="Align left in its container (a narrower block)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M2 2v12M5 5h8v6H5z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>

@@ -21,7 +21,9 @@
  * the focal point one of Elementor's nine positions), Delete has no undo after Save. A Save with a duplicate or delete
  * (reload: true) or a partly saved one reads the page again.
  * evive #581: a block moved or brought to front that a block around it cuts off (a cover, a rounded group) says so in
- * the status ("cut off by the photo block") and gets Let it stick out (clip "visible" on that block, this screen size). */
+ * the status ("cut off by the photo block") and gets Let it stick out (clip "visible" on that block, this screen size).
+ * evive #582: a resize says when the row gets wider than its container and which block around it grows with it ("the
+ * photo block grows with it"); Overlay (block pages, this screen size) takes the block out of the layout where it is. */
 (function () {
   'use strict';
   var cfg = window.eviveTweakConfig || {};
@@ -91,6 +93,10 @@
     if (i.picking) parts.push('click the image to set its focal point (Esc cancels)');
     if (i.structural) parts.push(i.structural === 'delete' ? 'deleted on Save' : 'duplicated on Save');
     if (t.clip) parts.push('lets blocks stick out'); // evive #581
+    if (t.overlay) parts.push('overlay (out of the layout)'); // evive #582
+    // evive #582: first (after a cut-off note), so they stay readable on a phone
+    if (i.grows) parts.unshift(i.grows.name + ' grows with it');
+    if (i.wider) parts.unshift('wider than its container');
     // evive #581: first, so it stays readable on a phone (the status line is cut off at the end)
     if (i.clippedBy) parts.unshift('cut off by ' + i.clippedBy.name);
     else if (i.sticksOutOf) parts.unshift('sticks out of ' + i.sticksOutOf.name);
@@ -182,6 +188,11 @@
       so.hidden = !(info && info.clippedBy);
       so.disabled = off || !(info && info.clippedBy);
       so.title = info && info.clippedBy ? 'Let this block stick out of ' + info.clippedBy.name + ' on ' + NAMES[device] + ' (Reset on that block undoes it)' : '';
+    }
+    var ov = btn('overlay'); // evive #582: block pages only (hidden on Elementor pages)
+    if (ov && !ELT) {
+      ov.disabled = off || !(info && (info.canOverlay || info.overlay));
+      ov.setAttribute('aria-pressed', info && info.overlay ? 'true' : 'false');
     }
   }
 
@@ -405,6 +416,7 @@
     if (a === 'align') { var v = e.target.closest('[data-act]').getAttribute('data-val'), i = api.info(); api.setBasic('align', i && i.tweak && i.tweak.align === v ? null : v); }
     if (a === 'duplicate') api.duplicate();
     if (a === 'stickout' && api.stickOut) api.stickOut(); // evive #581
+    if (a === 'overlay' && api.overlay) api.overlay(); // evive #582
     if (a === 'delete') deleteBlock();
   });
   // Keys also work while the focus is on the toolbar (not in the panel: its fields type, Esc closes it).

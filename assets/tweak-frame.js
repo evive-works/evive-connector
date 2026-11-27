@@ -25,7 +25,12 @@
  * (overflow hidden / clip: a cover, a group with rounded corners), up to its section: info() names that block
  * (clippedBy) and the toolbar offers Let it stick out, which sets clip "visible" on it for this screen size (as
  * Evive_Tweak::basics_rules(): overflow visible, the cover's layers inherit its rounded corners). Reset on that block
- * removes it; a Reset on a block inside it removes it too when nothing inside sticks out any more. */
+ * removes it; a Reset on a block inside it removes it too when nothing inside sticks out any more.
+ * evive #582: a block with a width gets flex-shrink:0 / flex-basis:auto (not a column of Columns), as Evive_Tweak::css(),
+ * so its siblings in a flex row keep their size. info() says when the row is then wider than its container (wider)
+ * and which block around it grows with it (grows: measured with and without its width). Overlay (overlay true, this
+ * screen size) takes it out of the layout (position:absolute, its parent positioned); toggling it keeps the block
+ * where it is by adding the difference to x / y (-200..200, MCP #586). Reset removes it with the rest. */
 (function () {
   'use strict';
   var cfg = window.eviveTweakFrame || {};
@@ -63,7 +68,7 @@
       if (!v || typeof v !== 'object') return;
       var c = {};
       ['x', 'y'].forEach(function (k) {
-        var n = Math.max(-40, Math.min(40, Math.round(Number(v[k]) || 0)));
+        var n = Math.max(-200, Math.min(200, Math.round(Number(v[k]) || 0))); // evive #582 (MCP #586): was -40..40
         if (n) c[k] = n;
       });
       if (v.width != null && v.width !== '' && !isNaN(Number(v.width))) {
@@ -86,6 +91,7 @@
       var f = v.focus, ok = function (n) { return n !== null && n !== '' && typeof n !== 'boolean' && isFinite(Number(n)) && Number(n) >= 0 && Number(n) <= 100; };
       if (f && typeof f === 'object' && ok(f.x) && ok(f.y)) c.focus = { x: Math.round(Number(f.x)), y: Math.round(Number(f.y)) };
       if (v.clip === 'visible') c.clip = 'visible'; // evive #581
+      if (v.overlay === true) c.overlay = true; // evive #582
       if (Object.keys(c).length) out[s] = c;
     });
     return out;
@@ -582,6 +588,7 @@
         r.push('translate:calc(' + (t.x || 0) + ' * var(--evive-tweak-step, 0.5rem)) calc(' + (t.y || 0) + ' * var(--evive-tweak-step, 0.5rem))');
       }
       if (t.width) r.push('width:' + t.width + '%', 'max-width:' + t.width + '%', 'box-sizing:border-box');
+      if (t.width && st.block !== 'core/column') r.push('flex-shrink:0', 'flex-basis:auto'); // evive #582
       if (!t.hidden) r = r.concat(spaceRules(t, st.base || {})); // evive #532
       var b = basicRules(focusPick === path ? Object.assign({}, t, { aspect: undefined }) : t, mediaKind(st.block)); // evive #575
       r = r.concat(b.own);
@@ -589,6 +596,7 @@
       out += '@media ' + MEDIA[s] + '{' + (r.length ? sel + '{' + r.join(';') + '}' : '');
       b.subs.forEach(function (x) { out += sel + x[0] + '{' + x[1].join(';') + '}'; });
       if (t.width && IMAGE_BLOCKS[st.block]) out += sel + ' img{width:100% !important;height:auto !important}';
+      if (t.overlay && !t.hidden) out += ':where(:has(> ' + sel + ')){position:relative}'; // evive #582
       out += '}';
     });
     // evive #575: a layer stays within its section (the top-level block): that gets a stacking context of its own.
@@ -610,7 +618,8 @@
     var own = [], subs = {}, order = [];
     function add(sel, rule) { if (!subs[sel]) { subs[sel] = []; order.push(sel); } subs[sel].push(rule); }
     if (t.hidden) return { own: own, subs: [] };
-    if (t.z) own.push('position:relative', 'z-index:' + t.z);
+    if (t.overlay) own.push('position:absolute'); // evive #582
+    if (t.z) { if (!t.overlay) own.push('position:relative'); own.push('z-index:' + t.z); }
     if (t.opacity) own.push('opacity:' + (t.opacity / 100));
     if (t.align) {
       var m = { left: ['0', 'auto'], center: ['auto', 'auto'], right: ['auto', '0'] }[t.align];
@@ -715,8 +724,87 @@
       structural: structural[p] ? structural[p].op : null, inner: selected.querySelectorAll('[data-evive-path]').length,
       canStructural: structOk(p),
       // evive #581: the block around it that cuts it off, or the one it sticks out of (clip "visible").
-      clippedBy: clipInfo(clippedBy(selected)), sticksOutOf: clipInfo(sticksOutOf(selected))
+      clippedBy: clipInfo(clippedBy(selected)), sticksOutOf: clipInfo(sticksOutOf(selected)),
+      // evive #582: the row is wider than its container, the block around it that grows with it, Overlay
+      wider: wider(selected), grows: clipInfo(growsWith(selected)), overlay: !!(st.tweak[device] && st.tweak[device].overlay),
+      canOverlay: canOverlay(selected)
     };
+  }
+
+  // ── One block's size only (evive #582) ─────────────────────────────────
+
+  function widthHere(node) {
+    var st = state[pathOf(node)], t = st && st.tweak[device];
+    return !!t && !t.hidden && !t.overlay && !!t.width;
+  }
+  function inFlow(n) {
+    var cs = getComputedStyle(n);
+    return cs.display !== 'none' && cs.position !== 'absolute' && cs.position !== 'fixed';
+  }
+  // True when a block with a width on this screen size makes its row (or itself) wider than the parent's content box.
+  // Layout widths (offsetWidth), so a move (translate) doesn't count. A row that wraps: only the block itself.
+  function wider(node) {
+    if (!widthHere(node)) return false;
+    var p = node.parentElement;
+    if (!p) return false;
+    var cs = getComputedStyle(p);
+    var inner = p.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
+    var row = /flex/.test(cs.display) && !/column/.test(cs.flexDirection) && cs.flexWrap === 'nowrap';
+    var kids = row ? Array.prototype.filter.call(p.children, inFlow) : [node];
+    var total = 0;
+    kids.forEach(function (k) {
+      var kc = getComputedStyle(k);
+      total += k.offsetWidth + (parseFloat(kc.marginLeft) || 0) + (parseFloat(kc.marginRight) || 0);
+    });
+    if (row && kids.length > 1) total += (parseFloat(cs.columnGap) || 0) * (kids.length - 1);
+    return inner > 0 && total > inner + 1;
+  }
+  // A block around it (up to its section) that you can see grow: a cover, a section, or one with a background or border.
+  function visibleBox(n) {
+    var b = n.getAttribute('data-evive-block') || '';
+    if (b === 'core/cover' || isSection(n)) return true;
+    var cs = getComputedStyle(n);
+    if (cs.backgroundImage && cs.backgroundImage !== 'none') return true;
+    if (parseFloat(cs.borderTopWidth) > 0 || parseFloat(cs.borderBottomWidth) > 0) return true;
+    var m = /rgba?\(([^)]+)\)/.exec(cs.backgroundColor || '');
+    return !!m && (m[1].split(',').length < 4 || parseFloat(m[1].split(',')[3]) > 0);
+  }
+  // The nearest such block that is taller with this block's width (this screen size) than without it, or null.
+  function growsWith(node) {
+    if (!widthHere(node)) return null;
+    var list = blockAncestors(node).filter(visibleBox);
+    if (!list.length) return null;
+    var st = state[pathOf(node)], keep = st.tweak;
+    var now = list.map(function (a) { return a.getBoundingClientRect().height; });
+    var t = JSON.parse(JSON.stringify(keep));
+    delete t[device].width;
+    st.tweak = clean(t);
+    render();
+    var before = list.map(function (a) { return a.getBoundingClientRect().height; });
+    st.tweak = keep;
+    render();
+    for (var i = 0; i < list.length; i++) if (now[i] > before[i] + 1) return list[i];
+    return null;
+  }
+  // Overlay: not for a section (top-level block) or a column of Columns.
+  function canOverlay(node) {
+    var st = state[pathOf(node)];
+    return !!st && (pathOf(node) || '').indexOf('.') >= 0 && st.block !== 'core/column' && !isSection(node);
+  }
+  // Toggle overlay on this screen size; the block stays where it is: the difference goes to x / y (in steps).
+  function toggleOverlay() {
+    if (!selected || !canOverlay(selected)) return;
+    var st = state[pathOf(selected)], t = JSON.parse(JSON.stringify(st.tweak));
+    var a = selected.getBoundingClientRect();
+    t[device] = Object.assign({}, t[device] || {});
+    t[device].overlay = !t[device].overlay;
+    st.tweak = clean(t);
+    render();
+    var b = selected.getBoundingClientRect(), d = st.tweak[device] || {};
+    t = JSON.parse(JSON.stringify(st.tweak));
+    t[device] = Object.assign({}, d, { x: (d.x || 0) + Math.round((a.left - b.left) / stepPx), y: (d.y || 0) + Math.round((a.top - b.top) / stepPx) });
+    st.tweak = clean(t);
+    render(); place(); notify();
   }
 
   // ── Let it stick out (evive #581) ──────────────────────────────────────
@@ -738,7 +826,7 @@
   // Only for a block that is moved or brought to front on this screen size (as the card asks), not for every block.
   function tweakedHere(node) {
     var st = state[pathOf(node)], t = st && st.tweak[device];
-    return !!t && !t.hidden && (!!t.x || !!t.y || t.z > 0);
+    return !!t && !t.hidden && (!!t.x || !!t.y || t.z > 0 || !!t.width || !!t.overlay); // evive #582: a resize or overlay too
   }
   function clippedBy(node) {
     if (!node || !tweakedHere(node)) return null;
@@ -1062,6 +1150,7 @@
     pickFocus: function () { if (focusPick) stopPick(); else startPick(); },
     duplicate: function () { toggleStructural('duplicate'); },
     stickOut: stickOut, // evive #581
+    overlay: toggleOverlay, // evive #582
     remove: function () { toggleStructural('delete'); },
     // evive #549
     previewLayout: previewLayout,

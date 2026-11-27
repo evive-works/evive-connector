@@ -2,6 +2,21 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
+## Unreleased
+
+- Resizing one block only changes that block (evive #582, with the evive MCP #583 and #586): a block with a tweaked
+  width (not a column of Columns) also gets `flex-shrink: 0` and `flex-basis: auto`, so in a flex row (a Group row,
+  Buttons) its siblings keep their size; a nowrap row may then stick out of its container. The toolbar status says
+  "wider than its container" and names a block around it that grows with it ("the photo block grows with it"). A
+  resized block that a clipping block around it cuts off gets **Let it stick out** (#581) too.
+- New toolbar toggle **Overlay** (block pages, this screen size): the new eviveTweak key `overlay: true` takes the block
+  out of the layout (`position: absolute` at its own spot; its parent gets a zero-specificity `position: relative`),
+  so its size never moves or grows anything else. Turning it on or off keeps the block where it is by adding the
+  difference to its move (x / y). Reset removes it with the other tweaks of that screen size.
+- Moves (x / y) go from -200 to 200 steps (was -40..40), as the evive MCP #586 allows, so an overlay block can be placed
+  anywhere in its section.
+- Elementor pages are unchanged: their widths are Elementor's own settings, rendered by Elementor.
+
 ## 1.8.3 — 2026-11-26
 
 - Let it stick out in tweak mode (evive #581, with the evive MCP #583): a block that is moved or brought to front and is
