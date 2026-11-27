@@ -23,7 +23,7 @@
  * evive #581: a block moved or brought to front that a block around it cuts off (a cover, a rounded group) says so in
  * the status ("cut off by the photo block") and gets Let it stick out (clip "visible" on that block, this screen size).
  * evive #582: a resize says when the row gets wider than its container and which block around it grows with it ("the
- * photo block grows with it"); Overlay (block pages, this screen size) takes the block out of the layout where it is. */
+ * photo block grows with it"), and when the blocks next to it change size after all; Overlay (block pages, this screen size) takes the block out of the layout where it is. */
 (function () {
   'use strict';
   var cfg = window.eviveTweakConfig || {};
@@ -96,6 +96,7 @@
     if (t.overlay) parts.push('overlay (out of the layout)'); // evive #582
     // evive #582: first (after a cut-off note), so they stay readable on a phone
     if (i.grows) parts.unshift(i.grows.name + ' grows with it');
+    if (i.siblings) parts.unshift(i.siblings === 1 ? 'the block next to it changes size too' : 'the blocks next to it change size too');
     if (i.wider) parts.unshift('wider than its container');
     // evive #581: first, so it stays readable on a phone (the status line is cut off at the end)
     if (i.clippedBy) parts.unshift('cut off by ' + i.clippedBy.name);

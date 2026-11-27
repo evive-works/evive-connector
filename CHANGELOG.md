@@ -8,11 +8,13 @@ Add your change under "## Unreleased" at the top; the release gate turns it into
   width (not a column of Columns) also gets `flex-shrink: 0` and `flex-basis: auto`, and its siblings `flex-shrink: 0`
   (zero specificity, so a value of their own wins), so in a flex row (a Group row, Buttons) its siblings keep their
   size; a nowrap row may then stick out of its container. The toolbar status says
-  "wider than its container" and names a block around it that grows with it ("the photo block grows with it"). A
+  "wider than its container" and names a block around it that grows with it ("the photo block grows with it"). In a
+  row that already squeezed its blocks before (wider than the row at their own size, e.g. on a phone), those go back
+  to their own size; the status then says "the block next to it changes size too" (Overlay avoids it). A
   resized block that a clipping block around it cuts off gets **Let it stick out** (#581) too.
 - New toolbar toggle **Overlay** (block pages, this screen size): the new eviveTweak key `overlay: true` takes the block
   out of the layout (`position: absolute` at its own spot; its parent gets a zero-specificity `position: relative`),
-  so its size never moves or grows anything else. Turning it on or off keeps the block where it is by adding the
+  so its size never moves or grows anything else (its siblings no longer get `flex-shrink: 0` for it). Turning it on or off keeps the block where it is by adding the
   difference to its move (x / y). Reset removes it with the other tweaks of that screen size.
 - Moves (x / y) go from -200 to 200 steps (was -40..40), as the evive MCP #586 allows, so an overlay block can be placed
   anywhere in its section.

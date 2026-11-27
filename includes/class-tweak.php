@@ -391,8 +391,9 @@ class Evive_Tweak {
             if (!$rules && !$sub) continue;
             $css .= '@media ' . $media[$size] . '{' . ($rules ? $sel . '{' . implode(';', $rules) . '}' : '');
             foreach ($sub as $s => $r) $css .= $sel . $s . '{' . implode(';', $r) . '}';
-            if ($flex && !empty($t['width']) && empty($t['hidden'])) {
-                // evive #582: its siblings don't shrink either (zero specificity: a flex-shrink of their own wins).
+            if ($flex && !empty($t['width']) && empty($t['hidden']) && empty($t['overlay'])) {
+                // evive #582: its siblings don't shrink either (zero specificity: a flex-shrink of their own wins). Not
+                // for an overlay: that is no flex item any more.
                 $css .= ':where(:has(> ' . $sel . ')) > *{flex-shrink:0}';
             }
             if (!empty($t['overlay']) && empty($t['hidden'])) {

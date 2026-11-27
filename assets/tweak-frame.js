@@ -28,7 +28,9 @@
  * removes it; a Reset on a block inside it removes it too when nothing inside sticks out any more.
  * evive #582: a block with a width gets flex-shrink:0 / flex-basis:auto and its siblings flex-shrink:0 (not a column of
  * Columns), as Evive_Tweak::css(), so its siblings in a flex row keep their size. info() says when the row is then wider than its container (wider)
- * and which block around it grows with it (grows: measured with and without its width). Overlay (overlay true, this
+ * and which block around it grows with it (grows: measured with and without its width), and whether the blocks next
+ * to it change size after all (siblings: a row that already squeezed them before, e.g. on a phone, lets them go back
+ * to their own size). Overlay (overlay true, this
  * screen size) takes it out of the layout (position:absolute, its parent positioned); toggling it keeps the block
  * where it is by adding the difference to x / y (-200..200, MCP #586). Reset removes it with the rest. */
 (function () {
@@ -596,7 +598,7 @@
       out += '@media ' + MEDIA[s] + '{' + (r.length ? sel + '{' + r.join(';') + '}' : '');
       b.subs.forEach(function (x) { out += sel + x[0] + '{' + x[1].join(';') + '}'; });
       if (t.width && IMAGE_BLOCKS[st.block]) out += sel + ' img{width:100% !important;height:auto !important}';
-      if (t.width && !t.hidden && st.block !== 'core/column') out += ':where(:has(> ' + sel + ')) > *{flex-shrink:0}'; // evive #582: siblings too
+      if (t.width && !t.hidden && !t.overlay && st.block !== 'core/column') out += ':where(:has(> ' + sel + ')) > *{flex-shrink:0}'; // evive #582: siblings too
       if (t.overlay && !t.hidden) out += ':where(:has(> ' + sel + ')){position:relative}'; // evive #582
       out += '}';
     });
@@ -706,7 +708,7 @@
 
   function info() {
     if (!selected) return null;
-    var p = pathOf(selected), st = state[p];
+    var p = pathOf(selected), st = state[p], fx = effects(selected); // evive #582
     return {
       path: p, block: st.block, device: device, tweak: st.tweak[device] || {},
       phoneHidden: !!(st.tweak.phone && st.tweak.phone.hidden),
@@ -727,7 +729,7 @@
       // evive #581: the block around it that cuts it off, or the one it sticks out of (clip "visible").
       clippedBy: clipInfo(clippedBy(selected)), sticksOutOf: clipInfo(sticksOutOf(selected)),
       // evive #582: the row is wider than its container, the block around it that grows with it, Overlay
-      wider: wider(selected), grows: clipInfo(growsWith(selected)), overlay: !!(st.tweak[device] && st.tweak[device].overlay),
+      wider: wider(selected), grows: clipInfo(fx.grows), siblings: fx.siblings, overlay: !!(st.tweak[device] && st.tweak[device].overlay),
       canOverlay: canOverlay(selected)
     };
   }
@@ -770,22 +772,31 @@
     var m = /rgba?\(([^)]+)\)/.exec(cs.backgroundColor || '');
     return !!m && (m[1].split(',').length < 4 || parseFloat(m[1].split(',')[3]) > 0);
   }
-  // The nearest such block that is taller with this block's width (this screen size) than without it, or null.
-  function growsWith(node) {
-    if (!widthHere(node)) return null;
+  // What this block's width (this screen size) does to the blocks around it, measured with and without it:
+  // grows: the nearest such block that is taller with it, or null; siblings: the number of blocks next to it (same
+  // parent, in the layout) whose width changed.
+  function effects(node) {
+    var none = { grows: null, siblings: 0 };
+    if (!widthHere(node)) return none;
     var list = blockAncestors(node).filter(visibleBox);
-    if (!list.length) return null;
+    var sibs = node.parentElement ? Array.prototype.filter.call(node.parentElement.children, function (k) { return k !== node && inFlow(k); }) : [];
+    if (!list.length && !sibs.length) return none;
     var st = state[pathOf(node)], keep = st.tweak;
-    var now = list.map(function (a) { return a.getBoundingClientRect().height; });
+    function measure() {
+      return { h: list.map(function (a) { return a.getBoundingClientRect().height; }), w: sibs.map(function (k) { return k.offsetWidth; }) };
+    }
+    var now = measure();
     var t = JSON.parse(JSON.stringify(keep));
     delete t[device].width;
     st.tweak = clean(t);
     render();
-    var before = list.map(function (a) { return a.getBoundingClientRect().height; });
+    var before = measure();
     st.tweak = keep;
     render();
-    for (var i = 0; i < list.length; i++) if (now[i] > before[i] + 1) return list[i];
-    return null;
+    var out = { grows: null, siblings: 0 };
+    for (var i = 0; i < list.length; i++) if (now.h[i] > before.h[i] + 1) { out.grows = list[i]; break; }
+    for (var j = 0; j < sibs.length; j++) if (Math.abs(now.w[j] - before.w[j]) > 1) out.siblings++;
+    return out;
   }
   // Overlay: not for a section (top-level block) or a column of Columns.
   function canOverlay(node) {
