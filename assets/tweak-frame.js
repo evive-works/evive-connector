@@ -26,8 +26,8 @@
  * (clippedBy) and the toolbar offers Let it stick out, which sets clip "visible" on it for this screen size (as
  * Evive_Tweak::basics_rules(): overflow visible, the cover's layers inherit its rounded corners). Reset on that block
  * removes it; a Reset on a block inside it removes it too when nothing inside sticks out any more.
- * evive #582: a block with a width gets flex-shrink:0 / flex-basis:auto (not a column of Columns), as Evive_Tweak::css(),
- * so its siblings in a flex row keep their size. info() says when the row is then wider than its container (wider)
+ * evive #582: a block with a width gets flex-shrink:0 / flex-basis:auto and its siblings flex-shrink:0 (not a column of
+ * Columns), as Evive_Tweak::css(), so its siblings in a flex row keep their size. info() says when the row is then wider than its container (wider)
  * and which block around it grows with it (grows: measured with and without its width). Overlay (overlay true, this
  * screen size) takes it out of the layout (position:absolute, its parent positioned); toggling it keeps the block
  * where it is by adding the difference to x / y (-200..200, MCP #586). Reset removes it with the rest. */
@@ -596,6 +596,7 @@
       out += '@media ' + MEDIA[s] + '{' + (r.length ? sel + '{' + r.join(';') + '}' : '');
       b.subs.forEach(function (x) { out += sel + x[0] + '{' + x[1].join(';') + '}'; });
       if (t.width && IMAGE_BLOCKS[st.block]) out += sel + ' img{width:100% !important;height:auto !important}';
+      if (t.width && !t.hidden && st.block !== 'core/column') out += ':where(:has(> ' + sel + ')) > *{flex-shrink:0}'; // evive #582: siblings too
       if (t.overlay && !t.hidden) out += ':where(:has(> ' + sel + ')){position:relative}'; // evive #582
       out += '}';
     });

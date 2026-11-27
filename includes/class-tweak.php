@@ -31,8 +31,9 @@ if (!defined('ABSPATH')) exit;
  *    rendered with overflow:visible, and a cover's image, video and dim layer get border-radius:inherit, so its rounded
  *    corners stay while a moved child (or one brought to front) can stick out of it.
  * 5. One block's size only (evive #582, MCP #583/#586): a block with a width (not a column of Columns) also gets
- *    flex-shrink:0 and flex-basis:auto, so in a flex row (Group row, Buttons) its siblings keep their size and the row
- *    may stick out instead; elsewhere these do nothing. overlay true per screen size takes the block out of the layout
+ *    flex-shrink:0 and flex-basis:auto, and its siblings flex-shrink:0 (zero specificity, through its parent), so in a
+ *    flex row (Group row, Buttons) a resize only changes this block and the row may stick out instead; elsewhere these
+ *    do nothing. overlay true per screen size takes the block out of the layout
  *    (position:absolute at its own spot; its parent becomes its containing block with a zero-specificity
  *    position:relative), so its size never moves or grows anything else; the tweak frame keeps it where it was by
  *    adding the difference to x / y.
@@ -390,6 +391,10 @@ class Evive_Tweak {
             if (!$rules && !$sub) continue;
             $css .= '@media ' . $media[$size] . '{' . ($rules ? $sel . '{' . implode(';', $rules) . '}' : '');
             foreach ($sub as $s => $r) $css .= $sel . $s . '{' . implode(';', $r) . '}';
+            if ($flex && !empty($t['width']) && empty($t['hidden'])) {
+                // evive #582: its siblings don't shrink either (zero specificity: a flex-shrink of their own wins).
+                $css .= ':where(:has(> ' . $sel . ')) > *{flex-shrink:0}';
+            }
             if (!empty($t['overlay']) && empty($t['hidden'])) {
                 // evive #582: the parent is the overlay's containing block (width % and spot as in the layout). Zero
                 // specificity: a parent that is already positioned (relative, sticky, absolute) keeps its own.
