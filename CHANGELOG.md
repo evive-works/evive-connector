@@ -2,7 +2,7 @@
 
 Add your change under "## Unreleased" at the top; the release gate turns it into "## X.Y.Z — date".
 
-## Unreleased
+## 1.8.4 — 2026-11-27
 
 - Resizing one block only changes that block (evive #582, with the evive MCP #583 and #586): a block with a tweaked
   width (not a column of Columns) also gets `flex-shrink: 0` and `flex-basis: auto`, and its siblings `flex-shrink: 0`
